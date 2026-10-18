@@ -72,7 +72,8 @@ test.group('openapi:generate on the playground app', group => {
         'application/json'
       ]!.schema
 
-    assert.containsSubset(schema.properties!.data!.properties, {
+    assert.deepEqual(schema.properties!.data, { $ref: '#/components/schemas/User' })
+    assert.containsSubset(document.components.schemas.User!.properties, {
       email: { type: 'string' },
       id: { type: 'number' },
     })
@@ -119,7 +120,10 @@ test.group('openapi:generate on the playground app', group => {
     const signup = document.paths['/api/v1/auth/signup']!.post!.responses
 
     assert.notProperty(signup, '200')
-    assert.deepEqual(signup['201']!.content!['application/json']!.schema.required, ['data'])
+    assert.deepEqual(
+      signup['201']!.content!['application/json']!.schema.properties!.data!.properties!.user,
+      { $ref: '#/components/schemas/User' },
+    )
     assert.deepEqual(document.paths['/api/v1/account/avatar']!.delete!.responses['204'], {
       description: 'No Content',
     })
@@ -130,5 +134,27 @@ test.group('openapi:generate on the playground app', group => {
       description: 'Unauthorized',
     })
     assert.notProperty(document.paths['/api/v1/auth/login']!.post!.responses, '401')
+  })
+
+  test('names transformer data as components and references them', ({ assert }) => {
+    const json = (path: string) =>
+      document.paths[path]!.get!.responses['200']!.content!['application/json']!.schema
+
+    assert.deepEqual(json('/api/v1/users/{id}').properties!.data, {
+      $ref: '#/components/schemas/User',
+    })
+    assert.deepEqual(json('/api/v1/users').properties!.data, {
+      type: 'array',
+      items: { $ref: '#/components/schemas/User' },
+    })
+  })
+
+  test('names the validation error as a shared component', ({ assert }) => {
+    assert.property(document.components.schemas, 'ValidationError')
+    assert.deepEqual(
+      document.paths['/api/v1/auth/login']!.post!.responses['422']!.content!['application/json']!
+        .schema,
+      { $ref: '#/components/schemas/ValidationError' },
+    )
   })
 })

@@ -1,4 +1,5 @@
 import ts from 'typescript'
+import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { operationDocs, type OperationDocs } from './operation_docs.ts'
 import { TypeToSchema } from './type_to_schema.ts'
@@ -58,6 +59,7 @@ export class RouteTypes {
 
   constructor(appRoot: string, routes: RouteOperation[]) {
     const entryFile = join(appRoot, '.adonisjs/openapi/routes.ts')
+    const dataFile = join(appRoot, '.adonisjs/client/data.d.ts')
 
     const config = ts.getParsedCommandLineOfConfigFile(
       join(appRoot, 'tsconfig.json'),
@@ -84,18 +86,46 @@ export class RouteTypes {
 
     // The app's own files carry the module augmentations (container bindings, auth guards) the types depend on.
     const program = ts.createProgram({
-      rootNames: [...config.fileNames, entryFile],
+      rootNames: [...config.fileNames, entryFile, ...(existsSync(dataFile) ? [dataFile] : [])],
       options: { ...config.options, noEmit: true },
       host,
     })
 
     this.#program = program
     this.checker = program.getTypeChecker()
-    this.schemas = new TypeToSchema(this.checker)
 
     const entry = program.getSourceFile(entryFile)!
     this.#routes = entry.statements.find(ts.isInterfaceDeclaration)!
     this.#validationError = entry.statements.find(ts.isTypeAliasDeclaration)
+
+    const validationError = this.validationError()
+    const named = new Map(this.#transformerTypes(program.getSourceFile(dataFile)))
+
+    if (validationError) named.set(validationError, 'ValidationError')
+
+    this.schemas = new TypeToSchema(this.checker, named)
+  }
+
+  /**
+   * The types `node ace codegen` names in `Data`, keyed by their path below it (`Admin.User`).
+   */
+  #transformerTypes(dataFile: ts.SourceFile | undefined) {
+    const module = dataFile && this.checker.getSymbolAtLocation(dataFile)
+    const data = module && this.checker.tryGetMemberInModuleExports('Data', module)
+
+    const walk = (namespace: ts.Symbol, path: string[]): [ts.Type, string][] =>
+      this.checker.getExportsOfModule(namespace).flatMap(symbol => {
+        if (symbol.name === 'Variants') return []
+
+        const name = [...path, symbol.name]
+        const nested = symbol.flags & ts.SymbolFlags.Namespace ? walk(symbol, name) : []
+
+        if (!(symbol.flags & ts.SymbolFlags.TypeAlias)) return nested
+
+        return [[this.checker.getDeclaredTypeOfSymbol(symbol), name.join('.')], ...nested]
+      })
+
+    return data ? walk(data, []) : []
   }
 
   /**

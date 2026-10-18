@@ -32,8 +32,20 @@ export interface OpenApiConfig {
    * Where the document is written, relative to the app root.
    */
   output: string
-  info: { title: string; version: string; description?: string }
+  info: {
+    title: string
+    version: string
+    summary?: string
+    description?: string
+    termsOfService?: string
+    contact?: { name?: string; url?: string; email?: string }
+    license?: { name: string; url?: string; identifier?: string }
+  }
   servers: { url: string; description?: string }[]
+  /**
+   * Written as the document's top-level `tags`, to describe and order the tags operations use.
+   */
+  tags: { name: string; description?: string }[]
   /**
    * Same filters as Tuyau's `generateRegistry({ routes })`. Only one of them can be set.
    */
@@ -92,6 +104,7 @@ export interface OpenApiDocument {
   openapi: '3.1.0'
   info: OpenApiConfig['info']
   servers?: OpenApiConfig['servers']
+  tags?: OpenApiConfig['tags']
   paths: Record<string, Partial<Record<HttpMethod, OpenApiOperation>>>
   components: {
     schemas: Record<string, JsonSchema>

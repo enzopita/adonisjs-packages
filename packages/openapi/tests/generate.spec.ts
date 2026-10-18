@@ -157,4 +157,8 @@ test.group('openapi:generate on the playground app', group => {
       { $ref: '#/components/schemas/ValidationError' },
     )
   })
+
+  test('writes the tags from the config', ({ assert }) => {
+    assert.deepEqual(document.tags, [{ name: 'Users', description: 'Public user profiles' }])
+  })
 })

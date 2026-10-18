@@ -238,5 +238,7 @@ export async function generateDocument(
 
   if (config.servers.length) document.servers = config.servers
 
+  if (config.tags.length) document.tags = config.tags
+
   return { document, warnings }
 }

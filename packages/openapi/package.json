@@ -25,6 +25,7 @@
   "exports": {
     ".": "./build/index.js",
     "./commands": "./build/commands/main.js",
+    "./routes": "./build/src/docs/routes.js",
     "./types": "./build/src/types.js"
   },
   "publishConfig": {

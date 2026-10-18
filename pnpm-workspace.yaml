@@ -13,7 +13,7 @@ catalog:
   '@poppinss/ts-exec': ^1.4.4
   '@types/node': '~26.6.5'
   '@vinejs/vine': ^4.4.0
-  typescript: '~6.0.3'
+  typescript: '~7.0.2'
 
 allowBuilds:
   '@swc/core': true

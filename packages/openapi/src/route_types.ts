@@ -5,6 +5,47 @@ import { TypeToSchema } from './type_to_schema.ts'
 import type { RouteOperation } from './types.ts'
 
 /**
+ * The `HttpResponse` helpers that set a status code, as Tuyau types them minus the
+ * informational and redirect ones. Declared here as well so apps without Tuyau get them.
+ */
+const RESPONSE_HELPERS = {
+  ok: 200,
+  json: 200,
+  created: 201,
+  accepted: 202,
+  nonAuthoritativeInformation: 203,
+  noContent: 204,
+  resetContent: 205,
+  partialContent: 206,
+  badRequest: 400,
+  unauthorized: 401,
+  paymentRequired: 402,
+  forbidden: 403,
+  notFound: 404,
+  methodNotAllowed: 405,
+  notAcceptable: 406,
+  proxyAuthenticationRequired: 407,
+  requestTimeout: 408,
+  conflict: 409,
+  gone: 410,
+  lengthRequired: 411,
+  preconditionFailed: 412,
+  requestEntityTooLarge: 413,
+  requestUriTooLong: 414,
+  unsupportedMediaType: 415,
+  requestedRangeNotSatisfiable: 416,
+  expectationFailed: 417,
+  unprocessableEntity: 422,
+  tooManyRequests: 429,
+  internalServerError: 500,
+  notImplemented: 501,
+  badGateway: 502,
+  serviceUnavailable: 503,
+  gatewayTimeout: 504,
+  httpVersionNotSupported: 505,
+}
+
+/**
  * Resolves the request and response types of every route with the app's own
  * tsconfig, through one in-memory module that names them all.
  */
@@ -135,7 +176,17 @@ function renderEntry(entryFile: string, appRoot: string, routes: RouteOperation[
     ? `import type { SimpleError } from '@vinejs/vine/types'\nexport type ValidationError = { errors: SimpleError[] }`
     : ''
 
-  return [...imports, validationError, `export interface Routes {\n${members.join('\n')}\n}`].join(
-    '\n',
+  const helpers = Object.entries(RESPONSE_HELPERS).map(
+    ([name, status]) =>
+      `    ${name}<T>(body?: T, etag?: boolean): { __response: T; __status: ${status} }`,
   )
+
+  const augmentation = `declare module '@adonisjs/core/http' {\n  interface HttpResponse {\n${helpers.join('\n')}\n  }\n}`
+
+  return [
+    ...imports,
+    validationError,
+    augmentation,
+    `export interface Routes {\n${members.join('\n')}\n}`,
+  ].join('\n')
 }

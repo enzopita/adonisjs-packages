@@ -114,4 +114,21 @@ test.group('openapi:generate on the playground app', group => {
       description: 'User not found',
     })
   })
+
+  test('takes the status code from the response helper the handler returns', ({ assert }) => {
+    const signup = document.paths['/api/v1/auth/signup']!.post!.responses
+
+    assert.notProperty(signup, '200')
+    assert.deepEqual(signup['201']!.content!['application/json']!.schema.required, ['data'])
+    assert.deepEqual(document.paths['/api/v1/account/avatar']!.delete!.responses['204'], {
+      description: 'No Content',
+    })
+  })
+
+  test('adds the 401 response to routes behind a security scheme', ({ assert }) => {
+    assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.responses['401'], {
+      description: 'Unauthorized',
+    })
+    assert.notProperty(document.paths['/api/v1/auth/login']!.post!.responses, '401')
+  })
 })

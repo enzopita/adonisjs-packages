@@ -19,7 +19,7 @@
     "docs:pull": "sh scripts/pull-docs.sh"
   },
   "devDependencies": {
-    "@changesets/changelog-github": "^0.5.1",
+    "@changesets/changelog-github": "^1.0.1",
     "@changesets/cli": "^2.29.7",
     "@commitlint/cli": "^21.2.3",
     "@commitlint/config-conventional": "^21.2.3",

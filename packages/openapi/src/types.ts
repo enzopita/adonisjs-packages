@@ -61,6 +61,7 @@ export interface RouteOperation {
   responseType?: string
   imports: string[]
   validator?: { specifier: string; exportName: string }
+  controller?: { path: string; method: string }
 }
 
 export interface OpenApiParameter {
@@ -77,7 +78,10 @@ export interface OpenApiResponse {
 
 export interface OpenApiOperation {
   operationId: string
+  summary?: string
+  description?: string
   tags: string[]
+  deprecated?: true
   parameters?: OpenApiParameter[]
   requestBody?: { required: true; content: Record<string, { schema: JsonSchema }> }
   responses: Record<string, OpenApiResponse>

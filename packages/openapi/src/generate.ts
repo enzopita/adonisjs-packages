@@ -96,6 +96,7 @@ function responsesFor(
   route: RouteOperation,
   types: RouteTypes,
   response: ts.Type | undefined,
+  thrown: Record<string, string>,
   warnings: string[],
 ) {
   const responses: Record<string, OpenApiResponse> = {}
@@ -122,6 +123,8 @@ function responsesFor(
       describe('200', types.schemas.convert(member))
     }
   }
+
+  for (const [code, description] of Object.entries(thrown)) responses[code] ??= { description }
 
   const validationError = route.validator && types.validationError()
 
@@ -186,9 +189,12 @@ export async function generateDocument(
       return scheme ? [{ [scheme]: [] }] : []
     })
 
+    const { responses: thrown, ...docs } = types.docs(route)
+
     const operation: Omit<OpenApiOperation, 'operationId'> = {
-      tags: [route.name.split('.')[0] ?? route.name],
-      responses: responsesFor(route, types, response, warnings),
+      ...docs,
+      tags: docs.tags ?? [route.name.split('.')[0] ?? route.name],
+      responses: responsesFor(route, types, response, thrown, warnings),
     }
 
     if (parameters.length) operation.parameters = parameters

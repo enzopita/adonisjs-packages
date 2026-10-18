@@ -1,5 +1,6 @@
 import ts from 'typescript'
 import { join, relative } from 'node:path'
+import { operationDocs, type OperationDocs } from './operation_docs.ts'
 import { TypeToSchema } from './type_to_schema.ts'
 import type { RouteOperation } from './types.ts'
 
@@ -10,6 +11,7 @@ import type { RouteOperation } from './types.ts'
 export class RouteTypes {
   readonly checker: ts.TypeChecker
   readonly schemas: TypeToSchema
+  #program: ts.Program
   #routes: ts.InterfaceDeclaration
   #validationError?: ts.TypeAliasDeclaration
 
@@ -46,6 +48,7 @@ export class RouteTypes {
       host,
     })
 
+    this.#program = program
     this.checker = program.getTypeChecker()
     this.schemas = new TypeToSchema(this.checker)
 
@@ -74,6 +77,31 @@ export class RouteTypes {
 
   validationError() {
     return this.#validationError && this.checker.getTypeAtLocation(this.#validationError)
+  }
+
+  /**
+   * The doc comments on the handler, read from the controller class the file exports by default.
+   */
+  docs({ controller }: RouteOperation): OperationDocs {
+    const file = controller && this.#program.getSourceFile(controller.path)
+    const module = file && this.checker.getSymbolAtLocation(file)
+    const exported = module && this.checker.tryGetMemberInModuleExports('default', module)
+
+    const symbol =
+      exported && exported.flags & ts.SymbolFlags.Alias
+        ? this.checker.getAliasedSymbol(exported)
+        : exported
+
+    const declaration = symbol?.declarations?.find(ts.isClassDeclaration)
+
+    const method = declaration?.members.find(
+      (member): member is ts.MethodDeclaration =>
+        ts.isMethodDeclaration(member) &&
+        ts.isIdentifier(member.name) &&
+        member.name.text === controller?.method,
+    )
+
+    return declaration && method ? operationDocs(declaration, method) : { responses: {} }
   }
 
   property(type: ts.Type, name: string) {

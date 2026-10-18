@@ -89,4 +89,29 @@ test.group('openapi:generate on the playground app', group => {
     ])
     assert.isUndefined(document.paths['/api/v1/auth/login']!.post!.security)
   })
+
+  test('reads the summary, description and deprecation from the handler doc comment', ({
+    assert,
+  }) => {
+    assert.containsSubset(document.paths['/api/v1/users/{id}']!.get, {
+      summary: 'Show a user',
+      description: 'Looks the user up by its numeric id.',
+    })
+    assert.isUndefined(document.paths['/api/v1/users/{id}']!.get!.deprecated)
+    assert.isTrue(document.paths['/api/v1/users']!.get!.deprecated)
+  })
+
+  test('takes tags from the controller doc comment unless the handler sets its own', ({
+    assert,
+  }) => {
+    assert.deepEqual(document.paths['/api/v1/users/{id}']!.get!.tags, ['Users'])
+    assert.deepEqual(document.paths['/api/v1/users']!.get!.tags, ['Directory'])
+    assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.tags, ['profile'])
+  })
+
+  test('documents the status codes named by @throws', ({ assert }) => {
+    assert.deepEqual(document.paths['/api/v1/users/{id}']!.get!.responses['404'], {
+      description: 'User not found',
+    })
+  })
 })

@@ -204,6 +204,20 @@ test.group('openapi:generate on the playground app', group => {
     )
   })
 
+  test('documents each exception of a union @throws under its own status', ({ assert }) => {
+    const conflict = document.paths['/api/v1/auth/signup']!.post!.responses['409']!
+
+    assert.deepEqual(conflict.content!['application/json']!.schema, {
+      type: 'object',
+      properties: {
+        code: { type: 'string', const: 'E_EMAIL_TAKEN' },
+        message: { type: 'string' },
+      },
+      required: ['code', 'message'],
+      additionalProperties: false,
+    })
+  })
+
   test('writes the tags from the config', ({ assert }) => {
     assert.deepEqual(document.tags, [{ name: 'Users', description: 'Public user profiles' }])
   })

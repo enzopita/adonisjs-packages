@@ -70,15 +70,20 @@ function exceptionResponse(checker: ts.TypeChecker, symbol: ts.Symbol) {
 
 /**
  * `@throws {404}` parses as a JSDoc type expression holding the literal type `404`,
- * `@throws {SmsRejectedException}` as a reference to the class.
+ * `@throws {SmsRejectedException}` as a reference to the class, and
+ * `@throws {AException | BException}` as a union of either.
  */
-function thrownResponse(checker: ts.TypeChecker, tag: ts.JSDocTag) {
-  const type = ts.isJSDocThrowsTag(tag) ? tag.typeExpression?.type : undefined
+function thrownResponse(
+  checker: ts.TypeChecker,
+  type: ts.TypeNode | undefined,
+): { code: string; bodies: ts.Type[] }[] {
+  if (type && ts.isUnionTypeNode(type))
+    return type.types.flatMap(member => thrownResponse(checker, member))
 
   if (type && ts.isLiteralTypeNode(type)) {
     const code = statusCode(type.literal)
 
-    return code && { code, bodies: [] }
+    return code ? [{ code, bodies: [] }] : []
   }
 
   const symbol = type && ts.isTypeReferenceNode(type) && checker.getSymbolAtLocation(type.typeName)
@@ -86,9 +91,10 @@ function thrownResponse(checker: ts.TypeChecker, tag: ts.JSDocTag) {
   const target =
     symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
 
-  return target && target.flags & ts.SymbolFlags.Class
-    ? exceptionResponse(checker, target)
-    : undefined
+  const response =
+    target && target.flags & ts.SymbolFlags.Class && exceptionResponse(checker, target)
+
+  return response ? [response] : []
 }
 
 /**
@@ -127,15 +133,15 @@ export function operationDocs(
     .filter(Boolean)
 
   for (const tag of doc?.tags ?? []) {
-    const thrown = thrownResponse(checker, tag)
+    if (ts.isJSDocThrowsTag(tag)) {
+      for (const thrown of thrownResponse(checker, tag.typeExpression?.type)) {
+        const response = (responses[thrown.code] ??= {
+          description: tagText(tag) || (STATUS_CODES[Number(thrown.code)] ?? thrown.code),
+          bodies: [],
+        })
 
-    if (thrown) {
-      const response = (responses[thrown.code] ??= {
-        description: tagText(tag) || (STATUS_CODES[Number(thrown.code)] ?? thrown.code),
-        bodies: [],
-      })
-
-      response.bodies.push(...thrown.bodies)
+        response.bodies.push(...thrown.bodies)
+      }
     } else if (tag.tagName.text === 'requestBody')
       requestBody = requestBodyType(checker, method, tag)
     else if (ts.isJSDocDeprecatedTag(tag)) deprecated = true

@@ -235,6 +235,7 @@ export default class UsersController {
 - `@tags Users, Admin` sets the operation tags. On the class, it applies to every method. A method's own `@tags` replaces the class tags. Without either, the tag is the first segment of the route name.
 - `@throws {404} User not found` adds a `404` response with that description. Without a description, the standard status text is used. Tags whose type is neither a three-digit code nor an exception class are ignored.
 - `@throws {SmsRejectedException}` adds the response of an exception class. See [Exception responses](#exception-responses).
+- `@throws {SmsRejectedException | InvalidAttachmentException}` adds the response of each class in the union, each under its own status code.
 - `@requestBody {TypeName}` sets the request body schema from a type in scope in the controller file. Use it when the handler reads the body without a validator, such as a webhook payload. It replaces the body the validator would document.
 
 ## Exception responses

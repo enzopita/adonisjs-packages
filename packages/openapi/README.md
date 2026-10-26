@@ -242,8 +242,11 @@ export default class UsersController {
 
 An exception class named by `@throws` documents its status code and its body:
 
-- The status code comes from `static status`, on the class or a parent class: a number such as `422`, `422 as const`, a constant or an enum member. Without one, the code `handle()` passes to `response.status(...)` is used.
-- The body is the return type of an instance method named `toResponse()`. Without `toResponse()`, it is the type of what `handle()` passes to `response.send(...)` or `response.json(...)`, and each different call adds one body. With neither, the response has no `content`.
+- A response helper that `handle()` calls, such as `response.conflict(body)` or `response.unprocessableEntity(body)`, adds its status code and body.
+- A `response.send(...)` or `response.json(...)` call adds a response with the status code of `static status`, on the class or a parent class: a number such as `422`, `422 as const`, a constant or an enum member. Without one, the code passed to `response.status(...)` is used. The body is the return type of an instance method named `toResponse()` or, without it, the type of what each call sends.
+- A class whose `handle()` sends nothing still adds the response of its `static status`, with `toResponse()` as the body when it has one.
+
+`handle()` is read with the functions of the app it calls, such as a shared `renderError(ctx, error)`. Functions from packages are not followed, and only calls on an `HttpResponse` count.
 
 ```ts
 export default class SmsRejectedException extends Exception {
@@ -269,7 +272,7 @@ An exception can also leave both to `handle()`:
 ```ts
 export default class EmailTakenException extends Exception {
   async handle(error: this, { response }: HttpContext) {
-    response.status(409).send({ code: 'E_EMAIL_TAKEN' as const, message: error.message })
+    response.conflict({ code: 'E_EMAIL_TAKEN' as const, message: error.message })
   }
 }
 ```

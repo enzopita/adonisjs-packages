@@ -9,6 +9,6 @@ export default class EmailTakenException extends Exception {
   }
 
   async handle(error: this, { response }: HttpContext) {
-    response.status(409).send({ code: 'E_EMAIL_TAKEN' as const, message: error.message })
+    response.conflict({ code: 'E_EMAIL_TAKEN' as const, message: error.message })
   }
 }

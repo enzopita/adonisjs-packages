@@ -58,37 +58,68 @@ function aliased(checker: ts.TypeChecker, symbol: ts.Symbol) {
   return symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
 }
 
+function property(checker: ts.TypeChecker, type: ts.Type, name: string) {
+  const symbol = checker.getPropertyOfType(type, name)
+
+  return symbol && checker.getTypeOfSymbol(symbol)
+}
+
 /**
- * The calls `handle()` makes on the response, such as `response.status(422)` and
- * `response.send(body)`, searched in the nearest class of the hierarchy that defines it.
+ * The calls `handle()` makes on an `HttpResponse`, also inside the functions of the app it
+ * calls, such as a shared `renderError(ctx, error)`. Functions from packages are not followed.
  */
-function handleCalls(checker: ts.TypeChecker, instance: ts.Type, names: Set<string>) {
-  const handle = checker.getPropertyOfType(instance, 'handle')?.valueDeclaration
-  const calls: ts.CallExpression[] = []
+function responseCalls(checker: ts.TypeChecker, instance: ts.Type) {
+  const calls: { name: string; call: ts.CallExpression }[] = []
+  const visited = new Set<ts.Node>()
 
   const visit = (node: ts.Node) => {
-    if (
-      ts.isCallExpression(node) &&
-      ts.isPropertyAccessExpression(node.expression) &&
-      names.has(node.expression.name.text) &&
-      node.arguments[0]
-    )
-      calls.push(node)
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression
+
+      const receiver =
+        ts.isPropertyAccessExpression(callee) && checker.getTypeAtLocation(callee.expression)
+
+      if (receiver && receiver.getSymbol()?.name === 'HttpResponse')
+        calls.push({ name: callee.name.text, call: node })
+      else follow(checker.getResolvedSignature(node)?.declaration)
+    }
 
     ts.forEachChild(node, visit)
   }
 
-  if (handle && ts.isMethodDeclaration(handle) && handle.body) visit(handle.body)
+  const follow = (declaration: ts.Declaration | undefined) => {
+    const body =
+      declaration &&
+      (ts.isFunctionDeclaration(declaration) ||
+        ts.isMethodDeclaration(declaration) ||
+        ts.isFunctionExpression(declaration) ||
+        ts.isArrowFunction(declaration))
+        ? declaration.body
+        : undefined
+
+    const file = declaration?.getSourceFile()
+
+    if (!body || !file || visited.has(body)) return
+
+    if (file.isDeclarationFile || file.fileName.includes('/node_modules/')) return
+
+    visited.add(body)
+    visit(body)
+  }
+
+  follow(checker.getPropertyOfType(instance, 'handle')?.valueDeclaration)
 
   return calls
 }
 
 /**
- * The status is the type of `static status`, so `422`, `422 as const`, a constant or an enum
- * member all resolve; a plain `static status = 422` widens to `number`, so its initializer is
- * read instead. Without either, `handle()`'s `response.status(...)` call gives it.
+ * What `handle()` answers with: a helper such as `response.conflict(body)` carries its status and
+ * body, and `response.status(409).send(body)` gives them one call each.
  *
- * The body is the return type of `toResponse()`, or else what `handle()` sends.
+ * The status of `send()` and `json()` is the type of `static status`, so `422`, `422 as const`, a
+ * constant or an enum member all resolve; a plain `static status = 422` widens to `number`, so its
+ * initializer is read instead, and without either the `response.status(...)` call gives it. Their
+ * body is the return type of `toResponse()` when the class has one.
  */
 function exceptionResponse(
   checker: ts.TypeChecker,
@@ -96,38 +127,54 @@ function exceptionResponse(
   problems: string[],
 ): Thrown[] {
   const instance = checker.getDeclaredTypeOfSymbol(symbol)
-  const status = checker.getPropertyOfType(checker.getTypeOfSymbol(symbol), 'status')
-  const declaration = status?.valueDeclaration
+  const calls = responseCalls(checker, instance)
 
-  const code =
-    statusOf(status && checker.getTypeOfSymbol(status)) ??
-    statusOf(
-      declaration && ts.isPropertyDeclaration(declaration) && declaration.initializer
-        ? checker.getTypeAtLocation(declaration.initializer)
-        : undefined,
-    ) ??
-    handleCalls(checker, instance, new Set(['status']))
-      .map(call => statusOf(checker.getTypeAtLocation(call.arguments[0]!)))
-      .find(Boolean)
+  const called = (...names: string[]) =>
+    calls.filter(({ name }) => names.includes(name)).map(({ call }) => call)
 
-  if (!code) {
-    problems.push(
-      `@throws: ${checker.typeToString(instance)} has no status code: give it a literal \`static status\` or call \`response.status(...)\` with one in \`handle()\``,
-    )
+  const responses: Thrown[] = []
 
-    return []
+  for (const { call } of calls) {
+    const type = checker.getTypeAtLocation(call)
+    const code = statusOf(property(checker, type, '__status'))
+    const body = call.arguments.length > 0 && property(checker, type, '__response')
+
+    if (code) responses.push({ code, bodies: body ? [body] : [] })
   }
 
+  const sends = called('send', 'json')
   const toResponse = checker.getPropertyOfType(instance, 'toResponse')
   const signature = toResponse && checker.getTypeOfSymbol(toResponse).getCallSignatures()[0]
 
-  const bodies = signature
-    ? [checker.getAwaitedType(signature.getReturnType())!]
-    : handleCalls(checker, instance, new Set(['send', 'json'])).map(call =>
-        checker.getTypeAtLocation(call.arguments[0]!),
-      )
+  if (sends.length > 0 || signature || responses.length === 0) {
+    const status = checker.getPropertyOfType(checker.getTypeOfSymbol(symbol), 'status')
+    const declaration = status?.valueDeclaration
 
-  return [{ code, bodies }]
+    const code =
+      statusOf(status && checker.getTypeOfSymbol(status)) ??
+      statusOf(
+        declaration && ts.isPropertyDeclaration(declaration) && declaration.initializer
+          ? checker.getTypeAtLocation(declaration.initializer)
+          : undefined,
+      ) ??
+      called('status')
+        .map(call => statusOf(checker.getTypeAtLocation(call.arguments[0]!)))
+        .find(Boolean)
+
+    const bodies = signature
+      ? [checker.getAwaitedType(signature.getReturnType())!]
+      : sends.flatMap(call =>
+          call.arguments[0] ? [checker.getTypeAtLocation(call.arguments[0])] : [],
+        )
+
+    if (code) responses.push({ code, bodies })
+    else
+      problems.push(
+        `@throws: ${checker.typeToString(instance)} has no status code: give it a literal \`static status\`, call \`response.status(...)\` with one in \`handle()\` or answer with a helper such as \`response.conflict(body)\``,
+      )
+  }
+
+  return responses
 }
 
 /**

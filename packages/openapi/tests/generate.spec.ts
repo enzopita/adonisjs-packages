@@ -221,7 +221,7 @@ test.group('openapi:generate on the playground app', group => {
     })
   })
 
-  test('reads the status and body an exception sends from its handle()', ({ assert }) => {
+  test('reads the response helper an exception answers with in its handle()', ({ assert }) => {
     assert.notInclude(logs, '@throws')
     assert.property(document.paths['/api/v1/auth/signup']!.post!.responses, '409')
   })

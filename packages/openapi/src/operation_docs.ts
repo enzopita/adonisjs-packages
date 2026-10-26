@@ -15,6 +15,10 @@ export interface OperationDocs {
    * The type a `@requestBody {TypeName}` tag names.
    */
   requestBody?: ts.Type
+  /**
+   * Why a `@throws` or `@requestBody` tag could not be documented.
+   */
+  problems: string[]
 }
 
 export interface ThrownResponse {
@@ -42,30 +46,88 @@ function tagsOf(doc: ts.JSDoc | undefined) {
   )
 }
 
-function statusCode(node: ts.Node | undefined) {
-  return node && ts.isNumericLiteral(node) && /^\d{3}$/.test(node.text) ? node.text : undefined
+type Thrown = { code: string; bodies: ts.Type[] }
+
+function statusOf(type: ts.Type | undefined) {
+  return type?.isNumberLiteral() && type.value >= 100 && type.value <= 599
+    ? String(type.value)
+    : undefined
+}
+
+function aliased(checker: ts.TypeChecker, symbol: ts.Symbol) {
+  return symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
 }
 
 /**
- * An exception class documents its response with `static status = 422` and, when
- * `handle()` sends a body, a `toResponse()` method that returns it.
+ * The calls `handle()` makes on the response, such as `response.status(422)` and
+ * `response.send(body)`, searched in the nearest class of the hierarchy that defines it.
  */
-function exceptionResponse(checker: ts.TypeChecker, symbol: ts.Symbol) {
-  const constructor = checker.getTypeOfSymbol(symbol)
-  const status = checker.getPropertyOfType(constructor, 'status')?.valueDeclaration
-  const code = status && ts.isPropertyDeclaration(status) && statusCode(status.initializer)
+function handleCalls(checker: ts.TypeChecker, instance: ts.Type, names: Set<string>) {
+  const handle = checker.getPropertyOfType(instance, 'handle')?.valueDeclaration
+  const calls: ts.CallExpression[] = []
 
-  if (!code) return undefined
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      names.has(node.expression.name.text) &&
+      node.arguments[0]
+    )
+      calls.push(node)
 
-  const toResponse = checker.getPropertyOfType(
-    checker.getDeclaredTypeOfSymbol(symbol),
-    'toResponse',
-  )
+    ts.forEachChild(node, visit)
+  }
 
+  if (handle && ts.isMethodDeclaration(handle) && handle.body) visit(handle.body)
+
+  return calls
+}
+
+/**
+ * The status is the type of `static status`, so `422`, `422 as const`, a constant or an enum
+ * member all resolve; a plain `static status = 422` widens to `number`, so its initializer is
+ * read instead. Without either, `handle()`'s `response.status(...)` call gives it.
+ *
+ * The body is the return type of `toResponse()`, or else what `handle()` sends.
+ */
+function exceptionResponse(
+  checker: ts.TypeChecker,
+  symbol: ts.Symbol,
+  problems: string[],
+): Thrown[] {
+  const instance = checker.getDeclaredTypeOfSymbol(symbol)
+  const status = checker.getPropertyOfType(checker.getTypeOfSymbol(symbol), 'status')
+  const declaration = status?.valueDeclaration
+
+  const code =
+    statusOf(status && checker.getTypeOfSymbol(status)) ??
+    statusOf(
+      declaration && ts.isPropertyDeclaration(declaration) && declaration.initializer
+        ? checker.getTypeAtLocation(declaration.initializer)
+        : undefined,
+    ) ??
+    handleCalls(checker, instance, new Set(['status']))
+      .map(call => statusOf(checker.getTypeAtLocation(call.arguments[0]!)))
+      .find(Boolean)
+
+  if (!code) {
+    problems.push(
+      `@throws: ${checker.typeToString(instance)} has no status code: give it a literal \`static status\` or call \`response.status(...)\` with one in \`handle()\``,
+    )
+
+    return []
+  }
+
+  const toResponse = checker.getPropertyOfType(instance, 'toResponse')
   const signature = toResponse && checker.getTypeOfSymbol(toResponse).getCallSignatures()[0]
-  const body = signature && checker.getAwaitedType(signature.getReturnType())
 
-  return { code, bodies: body ? [body] : [] }
+  const bodies = signature
+    ? [checker.getAwaitedType(signature.getReturnType())!]
+    : handleCalls(checker, instance, new Set(['send', 'json'])).map(call =>
+        checker.getTypeAtLocation(call.arguments[0]!),
+      )
+
+  return [{ code, bodies }]
 }
 
 /**
@@ -73,34 +135,44 @@ function exceptionResponse(checker: ts.TypeChecker, symbol: ts.Symbol) {
  * `@throws {SmsRejectedException}` as a reference to the class, and
  * `@throws {AException | BException}` as a union of either.
  */
-function thrownResponse(
-  checker: ts.TypeChecker,
-  type: ts.TypeNode | undefined,
-): { code: string; bodies: ts.Type[] }[] {
-  if (type && ts.isUnionTypeNode(type))
-    return type.types.flatMap(member => thrownResponse(checker, member))
+function thrownResponses(checker: ts.TypeChecker, type: ts.TypeNode, problems: string[]): Thrown[] {
+  if (ts.isUnionTypeNode(type))
+    return type.types.flatMap(member => thrownResponses(checker, member, problems))
 
-  if (type && ts.isLiteralTypeNode(type)) {
-    const code = statusCode(type.literal)
+  if (ts.isLiteralTypeNode(type)) {
+    const code = statusOf(checker.getTypeFromTypeNode(type))
 
-    return code ? [{ code, bodies: [] }] : []
+    if (code) return [{ code, bodies: [] }]
+
+    problems.push(`@throws: ${type.getText()} is not a status code`)
+
+    return []
   }
 
-  const symbol = type && ts.isTypeReferenceNode(type) && checker.getSymbolAtLocation(type.typeName)
+  const symbol = ts.isTypeReferenceNode(type) && checker.getSymbolAtLocation(type.typeName)
+  const target = symbol && aliased(checker, symbol)
 
-  const target =
-    symbol && symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
+  if (target && target.flags & ts.SymbolFlags.Class)
+    return exceptionResponse(checker, target, problems)
 
-  const response =
-    target && target.flags & ts.SymbolFlags.Class && exceptionResponse(checker, target)
+  problems.push(
+    target && target.declarations?.length
+      ? `@throws: ${type.getText()} is not a class`
+      : `@throws: ${type.getText()} is not in scope, import it in the controller`,
+  )
 
-  return response ? [response] : []
+  return []
 }
 
 /**
  * `@requestBody {TypeName}` is not a tag TypeScript parses, so its comment holds the name to resolve.
  */
-function requestBodyType(checker: ts.TypeChecker, method: ts.MethodDeclaration, tag: ts.JSDocTag) {
+function requestBodyType(
+  checker: ts.TypeChecker,
+  method: ts.MethodDeclaration,
+  tag: ts.JSDocTag,
+  problems: string[],
+) {
   const name = /^\{\s*([\w$]+)\s*\}$/.exec(tagText(tag))?.[1]
 
   const symbol =
@@ -109,11 +181,13 @@ function requestBodyType(checker: ts.TypeChecker, method: ts.MethodDeclaration, 
       .getSymbolsInScope(method, ts.SymbolFlags.Type | ts.SymbolFlags.Alias)
       .find(candidate => candidate.name === name)
 
-  return symbol
-    ? checker.getDeclaredTypeOfSymbol(
-        symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol,
-      )
-    : undefined
+  if (symbol) return checker.getDeclaredTypeOfSymbol(aliased(checker, symbol))
+
+  problems.push(
+    `@requestBody ${tagText(tag)}: ${name ? `${name} is not in scope, import it in the controller` : 'expected a type name, such as {MailEvent}'}`,
+  )
+
+  return undefined
 }
 
 export function operationDocs(
@@ -126,6 +200,7 @@ export function operationDocs(
   let requestBody: ts.Type | undefined
   const tags = tagsOf(doc) ?? tagsOf(jsDoc(controller))
   let deprecated = false
+  const problems: string[] = []
 
   const [summary, ...paragraphs] = (ts.getTextOfJSDocComment(doc?.comment) ?? '')
     .split(/\n\s*\n/)
@@ -134,7 +209,11 @@ export function operationDocs(
 
   for (const tag of doc?.tags ?? []) {
     if (ts.isJSDocThrowsTag(tag)) {
-      for (const thrown of thrownResponse(checker, tag.typeExpression?.type)) {
+      const thrownTypes = tag.typeExpression
+        ? thrownResponses(checker, tag.typeExpression.type, problems)
+        : []
+
+      for (const thrown of thrownTypes) {
         const response = (responses[thrown.code] ??= {
           description: tagText(tag) || (STATUS_CODES[Number(thrown.code)] ?? thrown.code),
           bodies: [],
@@ -143,7 +222,7 @@ export function operationDocs(
         response.bodies.push(...thrown.bodies)
       }
     } else if (tag.tagName.text === 'requestBody')
-      requestBody = requestBodyType(checker, method, tag)
+      requestBody = requestBodyType(checker, method, tag, problems)
     else if (ts.isJSDocDeprecatedTag(tag)) deprecated = true
     else if (tag.tagName.text === 'remarks' && tagText(tag)) paragraphs.push(tagText(tag))
   }
@@ -155,5 +234,6 @@ export function operationDocs(
     ...(deprecated && { deprecated: true }),
     ...(requestBody && { requestBody }),
     responses,
+    problems,
   }
 }

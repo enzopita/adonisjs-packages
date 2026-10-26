@@ -203,7 +203,9 @@ export async function generateDocument(
     const readsQueryOnly = route.methods.every(method => method === 'get' || method === 'options')
     const fields = input && pick(input, key => !NOT_IN_BODY.has(key))
 
-    const { responses: thrown, requestBody, ...docs } = types.docs(route)
+    const { responses: thrown, requestBody, problems, ...docs } = types.docs(route)
+
+    warnings.push(...problems.map(problem => `${route.name}: ${problem}`))
 
     const validated = readsQueryOnly ? undefined : fields
     const body = requestBody ? types.schemas.convert(requestBody) : validated

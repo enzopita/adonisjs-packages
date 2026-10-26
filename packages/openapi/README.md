@@ -233,7 +233,7 @@ export default class UsersController {
 - The first paragraph is the `summary`. The next paragraphs and `@remarks` are the `description`.
 - `@deprecated` marks the operation as deprecated.
 - `@tags Users, Admin` sets the operation tags. On the class, it applies to every method. A method's own `@tags` replaces the class tags. Without either, the tag is the first segment of the route name.
-- `@throws {404} User not found` adds a `404` response with that description. Without a description, the standard status text is used. Tags whose type is neither a three-digit code nor an exception class are ignored.
+- `@throws {404} User not found` adds a `404` response with that description. Without a description, the standard status text is used. A tag that can't be documented, such as a name not in scope or a class with no status code, is skipped with a warning from `openapi:generate`.
 - `@throws {SmsRejectedException}` adds the response of an exception class. See [Exception responses](#exception-responses).
 - `@throws {SmsRejectedException | InvalidAttachmentException}` adds the response of each class in the union, each under its own status code.
 - `@requestBody {TypeName}` sets the request body schema from a type in scope in the controller file. Use it when the handler reads the body without a validator, such as a webhook payload. It replaces the body the validator would document.
@@ -242,8 +242,8 @@ export default class UsersController {
 
 An exception class named by `@throws` documents its status code and its body:
 
-- The status code is the numeric literal assigned to `static status`, on the class or a parent class. A class without one is ignored.
-- The body is the return type of an instance method named `toResponse()`. Make `handle()` send what `toResponse()` returns, so the document matches the response. Without `toResponse()`, the response has no `content`.
+- The status code comes from `static status`, on the class or a parent class: a number such as `422`, `422 as const`, a constant or an enum member. Without one, the code `handle()` passes to `response.status(...)` is used.
+- The body is the return type of an instance method named `toResponse()`. Without `toResponse()`, it is the type of what `handle()` passes to `response.send(...)` or `response.json(...)`, and each different call adds one body. With neither, the response has no `content`.
 
 ```ts
 export default class SmsRejectedException extends Exception {
@@ -260,6 +260,16 @@ export default class SmsRejectedException extends Exception {
 
   async handle(error: this, { response }: HttpContext) {
     response.status(error.status).send(error.toResponse())
+  }
+}
+```
+
+An exception can also leave both to `handle()`:
+
+```ts
+export default class EmailTakenException extends Exception {
+  async handle(error: this, { response }: HttpContext) {
+    response.status(409).send({ code: 'E_EMAIL_TAKEN' as const, message: error.message })
   }
 }
 ```

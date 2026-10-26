@@ -174,7 +174,7 @@ export class RouteTypes {
 
     return declaration && method
       ? operationDocs(this.checker, declaration, method)
-      : { responses: {} }
+      : { responses: {}, problems: [] }
   }
 
   property(type: ts.Type, name: string) {

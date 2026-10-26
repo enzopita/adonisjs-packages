@@ -10,10 +10,13 @@ const run = promisify(execFile)
 
 test.group('openapi:generate on the playground app', group => {
   let document: OpenApiDocument
+  let logs: string
 
   group.setup(async () => {
     await run('node', ['ace', 'codegen'], { cwd: playground })
-    await run('node', ['ace', 'openapi:generate', `--output=${output}`], { cwd: playground })
+    ;({ stdout: logs } = await run('node', ['ace', 'openapi:generate', `--output=${output}`], {
+      cwd: playground,
+    }))
     document = JSON.parse(await readFile(new URL(output, playground), 'utf8'))
 
     return () => rm(new URL(output, playground))
@@ -216,6 +219,11 @@ test.group('openapi:generate on the playground app', group => {
       required: ['code', 'message'],
       additionalProperties: false,
     })
+  })
+
+  test('reads the status and body an exception sends from its handle()', ({ assert }) => {
+    assert.notInclude(logs, '@throws')
+    assert.property(document.paths['/api/v1/auth/signup']!.post!.responses, '409')
   })
 
   test('writes the tags from the config', ({ assert }) => {

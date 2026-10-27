@@ -1,10 +1,6 @@
 import type { HttpMethod, OpenApiConfig } from '../types.ts'
 import type { RouteOperation } from '../routes/route_operation.ts'
 
-/**
- * The route name, with `.without_<param>` on the path without an optional param and `.<method>`
- * when the route answers several methods. `config.operationId` replaces the whole id.
- */
 export function operationIdFor(
   route: RouteOperation,
   method: HttpMethod,

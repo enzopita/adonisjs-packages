@@ -4,9 +4,6 @@ import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
 import { generateInCopy } from './support/playground.ts'
 
-/**
- * Generates a copy of the playground whose config also sets `operationId` to `source`.
- */
 function generateWith(source: string) {
   return generateInCopy(async copy => {
     const config = join(copy, 'config/openapi.ts')

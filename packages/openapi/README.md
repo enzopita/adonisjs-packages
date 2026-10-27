@@ -2,16 +2,17 @@
 
 Generate an OpenAPI 3.1 document from an AdonisJS 7 app, with no annotations. The generator reads the same sources as [Tuyau](https://github.com/Julien-R44/tuyau):
 
-| OpenAPI                             | Source                                                                                         |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Paths and operations                | Named routes from the router                                                                   |
-| Request body, query and path params | The VineJS validator passed to `request.validateUsing()` (formats, bounds and enums included)  |
-| Responses                           | The return type of the controller method, such as `serialize(UserTransformer.transform(user))` |
-| Status codes                        | Response helpers such as `response.created()`, the exceptions the action throws, and tags      |
-| `summary`, `description`, `tags`    | The doc comment on the controller method and its class                                         |
-| Named schemas                       | The transformer types `node ace codegen` writes to `.adonisjs/client/data.d.ts`                |
-| `422` response                      | Added to every route that validates its input                                                  |
-| `401` response and `security`       | Named middleware on the route, mapped in the config                                            |
+| OpenAPI                             | Source                                                                                              |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Paths and operations                | Named routes from the router                                                                        |
+| Request body, query and path params | The VineJS validator passed to `request.validateUsing()` (formats, bounds and enums included)       |
+| Responses                           | The return type of the controller method, such as `serialize(UserTransformer.transform(user))`      |
+| Status codes                        | Response helpers such as `response.created()`, the exceptions the action throws, and its middleware |
+| `summary`, `description`, `tags`    | The doc comment on the controller method and its class                                              |
+| Response descriptions               | The doc comment on the middleware or exception class a response comes from, or a tag on the action  |
+| Named schemas                       | The transformer types `node ace codegen` writes to `.adonisjs/client/data.d.ts`                     |
+| `422` response                      | Added to every route that validates its input                                                       |
+| `401` response and `security`       | Named middleware on the route, mapped in the config                                                 |
 
 Controllers, validators and transformers import nothing from this package. Everything it reads is code an AdonisJS app already has, or a doc comment.
 
@@ -21,7 +22,7 @@ Controllers, validators and transformers import nothing from this package. Every
 node ace add @enzopita/adonisjs-openapi
 ```
 
-The command installs the package and creates `config/openapi.ts`. In `adonisrc.ts`, it registers the ace command and the build hook that writes the document during `node ace build`, and adds the document to `metaFiles`. The package needs `@adonisjs/assembler`, which every AdonisJS app has as a dev dependency.
+The command installs the package and creates `config/openapi.ts`. In `adonisrc.ts`, it registers the ace command and the build hook that writes the document during `node ace build` and ships it with the build. The package needs `@adonisjs/assembler`, which every AdonisJS app has as a dev dependency.
 
 ## Generate the document
 
@@ -29,9 +30,9 @@ The command installs the package and creates `config/openapi.ts`. In `adonisrc.t
 node ace openapi:generate
 ```
 
-The command boots the app the way `node ace codegen` does, so no database connection or queue worker starts. It writes `openapi.json` at the app root. To write it somewhere else, pass `--output=public/openapi.json` or set `output` in the config. An absolute `--output` is used as given.
+The command boots the app the way `node ace codegen` does, so no database connection or queue worker starts. It writes the document to `output` from the config, `openapi.json` at the app root by default. An absolute `output` is used as given.
 
-Each warning starts with a stable code, such as `OA-R002`, and names the route and the source line when it has one. `generateDocument()` returns them as `diagnostics`, with `code`, `severity`, `route`, `message`, `fix` and `location`. A diagnostic with the `error` severity, such as a `@throws {404}`, fails the command, and no file is written.
+The command prints a [diagnostic](#diagnostics) for each problem it finds. A diagnostic starts with a stable code, such as `OA-R002`, and names the route and the source line when it has one. An `error` diagnostic, such as a `@throws {404}`, fails the command, and no file is written. A `warning` does not, unless the config sets `strict: true` or you pass `--strict`. `--no-strict` turns a `strict` config off for one run.
 
 To see where each response of a route comes from, pass the route name to `--explain`. The command prints the sources and writes no file:
 
@@ -46,13 +47,38 @@ node ace openapi:generate --explain=users.users.show
 #   the validator rejects the input
 ```
 
+`generateDocument(app, router, config)` returns the same result to code, such as a test of the app: `document`, `diagnostics` (`code`, `severity`, `route`, `message`, `fix`, `location`) and `provenance`, the sources `--explain` prints.
+
 ### Check the committed document
 
 ```sh
 node ace openapi:check
 ```
 
-The command generates the document in memory and compares it with the file at `output`. When they differ, it lists the JSON Pointers that changed and exits with code `1`. Run it in CI when clients are generated from the committed file.
+The command generates the document in memory and compares it with the file at `output`. It fails with exit code `1` when the file is missing, when the two differ, or when a diagnostic is an error. When they differ, it lists the JSON Pointers that changed. It prints the diagnostics like `openapi:generate`, takes the same `--strict` and `--no-strict` flags, and writes no file.
+
+`openapi:check` compares against the committed file, so commit `output`. A client generated from that file, such as one orval writes, then changes only when the document does.
+
+### Run the check in CI and in a git hook
+
+In CI, run the check after installing the dependencies:
+
+```sh
+node ace openapi:check --strict
+```
+
+Before a push, [lefthook](https://lefthook.dev) can run it when the push touches a file the document comes from:
+
+```yaml
+# lefthook.yml
+pre-push:
+  commands:
+    openapi:
+      glob: '{app/**,start/**,config/openapi.ts}'
+      run: node ace openapi:check --strict
+```
+
+When the hook fails, run `node ace openapi:generate`, commit `output`, and push again.
 
 ## Configure
 
@@ -65,19 +91,23 @@ import { defineConfig } from '@enzopita/adonisjs-openapi'
 
 export default defineConfig({
   output: 'openapi.json',
-  info: {
-    title: 'Acme API',
-    version: '1.0.0',
-    license: { name: 'MIT', identifier: 'MIT' },
+  document: {
+    info: {
+      title: 'Acme API',
+      version: '1.0.0',
+      license: { name: 'MIT', identifier: 'MIT' },
+    },
+    servers: [{ url: 'https://api.acme.test' }],
+    tags: [{ name: 'Users', description: 'Public user profiles' }],
   },
-  servers: [{ url: 'https://api.acme.test' }],
-  tags: [{ name: 'Users', description: 'Public user profiles' }],
   routes: { except: ['admin.'] },
-  securitySchemes: {
-    accessToken: { type: 'http', scheme: 'bearer' },
-  },
-  middlewareSecurity: {
-    auth: 'accessToken',
+  security: {
+    schemes: {
+      accessToken: { type: 'http', scheme: 'bearer' },
+    },
+    middleware: {
+      auth: 'accessToken',
+    },
   },
   errors: {
     throwers: {
@@ -86,167 +116,45 @@ export default defineConfig({
     },
     middleware: { globalThrottle: limiterErrors.E_TOO_MANY_REQUESTS },
   },
+  strict: false,
+  rules: { summaryMaxLength: 60, summaryTrailingPeriod: false },
 })
 ```
 
-- `routes` takes `only` or `except`, with the same matchers as Tuyau's `generateRegistry()`: a substring, a regular expression, or a function of the route name.
-- `info` is the OpenAPI Info Object: `title` and `version`, and optionally `summary`, `description`, `termsOfService`, `contact` and `license`.
-- `tags` is copied to the document's top-level `tags`. Use it to describe the tags operations use and to set their order.
-- `middlewareSecurity` maps a named middleware, such as `middleware.auth()`, to a key of `securitySchemes`. Routes behind it get the scheme in `security` and a `401` response. A route behind several mapped middleware, such as `middleware.auth()` and `middleware.tenant()`, requires all their schemes together: they share one Security Requirement Object.
-- `errors.throwers` names the exception a call throws inside a package, which the generator does not read. Calls are matched in the action and in the functions of the app it calls. The response is the one of the class, see [Error bodies](#error-bodies). A key is matched against the last names of the call. A call in the middle of the chain drops its method name and keeps its receiver:
+Every key is optional. `defineConfig()` throws when the config sets a 0.x key, such as `info` or `securitySchemes`, and names where it went.
+
+| Key                   | Default                              | Description                                                                                                                                                                          |
+| --------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `output`              | `'openapi.json'`                     | The document file, relative to the app root or absolute. `openapi:generate` writes it, `openapi:check` and `openapiRoutes({ source: 'file' })` read it, and the build hook ships it. |
+| `document.info`       | `{ title: 'API', version: '1.0.0' }` | The OpenAPI Info Object: `title` and `version`, and optionally `summary`, `description`, `termsOfService`, `contact` and `license`.                                                  |
+| `document.servers`    | `[]`                                 | The document's `servers`.                                                                                                                                                            |
+| `document.tags`       | `[]`                                 | The document's top-level `tags`, which describe and order the tags operations use. A tag an operation uses must be declared here, or it gets `OA-S002`.                              |
+| `routes`              | `{}`                                 | `only` or `except`, with the same matchers as Tuyau's `generateRegistry()`: a substring, a regular expression, or a function of the route name.                                      |
+| `security.schemes`    | `{}`                                 | The document's `components.securitySchemes`.                                                                                                                                         |
+| `security.middleware` | `{}`                                 | Maps a named middleware, such as `middleware.auth()`, to a key of `security.schemes`. See [Security](#security).                                                                     |
+| `errors`              | `{}`                                 | The exceptions thrown inside packages, and the error body. See [Errors config](#errors-config).                                                                                      |
+| `strict`              | `false`                              | Makes every warning an error. The `--strict` and `--no-strict` flags override it.                                                                                                    |
+| `rules`               | `{}`                                 | `summaryMaxLength` warns about a longer summary (`OA-S003`). `summaryTrailingPeriod: true` warns about a summary without a final period, `false` about one with it (`OA-S004`).      |
+
+### Security
+
+Routes behind a middleware that `security.middleware` maps get its scheme in `security` and a `401` response. A route behind several mapped middleware, such as `middleware.auth()` and `middleware.tenant()`, requires all their schemes together: they share one Security Requirement Object.
+
+### Errors config
+
+The generator follows `throw new X()` in the app's code. It does not read package code, so `errors` names what packages throw:
+
+- `errors.throwers` names the exception a call throws inside a package. Calls are matched in the action and in the functions of the app it calls. The response is the one of the class, see [Error bodies](#error-bodies). A key is matched against the last names of the call. A call in the middle of the chain drops its method name and keeps its receiver:
   - `findOrFail` matches any call of a method named `findOrFail`.
   - `bouncer.authorize` matches `bouncer.authorize()`, `ctx.bouncer.authorize()` and `bouncer.with(PostPolicy).authorize()`, which reads as `bouncer.authorize`.
+  - `failures.consume` matches `failures.consume(key)`, where `failures` is the local name of the receiver, whatever its type.
   - `this.getBouncer().authorize()` reads as `this.authorize`, and `bouncerFor(user).authorize()` as `bouncerFor.authorize`, so `bouncer.authorize` matches neither.
-  - `policy.authorize` also matches `policy.for(user).authorize()`, since the matching does not check the type of the receiver.
 - `errors.middleware` names the exception a middleware throws inside a package. The key is the middleware's name as `node ace list:routes` shows it: a named middleware, such as `auth`, or the name of a function middleware, such as the `globalThrottle` that `limiter.define('global', ...)` returns. It can also be a specifier in `start/kernel.ts`. The generator matches names and loads no module to do it.
-- A `throwers` or `middleware` key that matches nothing in the documented routes, such as a misspelled `bouncer.authorise`, gets the `OA-E003` warning.
-- An entry's status is read from the source of its class, which the generator never runs: a numeric `status` field, `static status`, the `status` its constructor sets, or the one of a class it extends. A package class is read from its JavaScript, since its declaration file only says `status: number`. An entry whose status cannot be read gets the `OA-E001` warning and is ignored.
-- `errors.body` is the body of an error the exception handler renders without a branch for its class, as a type expression such as `"import('#types/api').ApiError"`. Without it, that body is read from the exception handler. It replaces `errorResponse`, which `defineConfig()` now rejects with an error.
+- `errors.body` is the body of an error the exception handler renders without a branch for its class, as a type expression such as `"import('#types/api').ApiError"`. Without it, that body is read from the exception handler.
 
-## Serve a docs page
+A `throwers` or `middleware` key that matches nothing in the documented routes, such as a misspelled `bouncer.authorise`, gets `OA-E003`. An entry's status is read from the source of its class, which the generator never runs: a numeric `status` field, `static status`, the `status` its constructor sets, or the one of a class it extends. A package class is read from its JavaScript, since its declaration file only says `status: number`. An entry whose status cannot be read gets `OA-E001` and is ignored.
 
-`openapiRoutes()` registers two routes: a page that renders the document with [Scalar](https://github.com/scalar/scalar), and the document itself.
-
-```ts
-// start/routes.ts
-import { middleware } from '#start/kernel'
-import { openapiRoutes } from '@enzopita/adonisjs-openapi/routes'
-
-openapiRoutes().use(middleware.auth({ guards: ['basic'] }))
-```
-
-| Route                    | Name               | Response                            |
-| ------------------------ | ------------------ | ----------------------------------- |
-| `GET /docs`              | `openapi.ui`       | The HTML page                       |
-| `GET /docs/openapi.json` | `openapi.document` | The document, as `application/json` |
-
-`openapiRoutes()` returns the route group, so `.use()`, `.domain()`, `.prefix()` and `.as()` work on it. `.as('admin')` names the routes `admin.openapi.ui` and `admin.openapi.document`.
-
-The page loads the document from a URL relative to the page, so it keeps working behind a proxy that serves the app under a path prefix. The generator leaves both routes out of the document, as it does every closure route. Tuyau keeps named closure routes, so they appear in its client registry. To leave them out, exclude them where `adonisrc.ts` calls `generateRegistry()`:
-
-```ts
-generateRegistry({ routes: { except: [/^openapi\./] } })
-```
-
-### Turn the page on or off
-
-The routes exist only where `openapiRoutes()` runs. To serve the page outside production only:
-
-```ts
-import app from '@adonisjs/core/services/app'
-
-if (!app.inProduction) openapiRoutes()
-```
-
-To turn it on with an environment variable, declare `OPENAPI_DOCS: Env.schema.boolean.optional()` in `start/env.ts`, then:
-
-```ts
-import env from '#start/env'
-
-if (env.get('OPENAPI_DOCS')) openapiRoutes().use(middleware.auth({ guards: ['basic'] }))
-```
-
-To remove the page, delete the call. No other file of the app imports `@enzopita/adonisjs-openapi/routes`.
-
-### Options
-
-| Option      | Default                                    | Description                                                                                                                                      |
-| ----------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `prefix`    | `'/docs'`                                  | Path of the page. The document is at `<prefix>/openapi.json`.                                                                                    |
-| `ui`        | `'scalar'`                                 | `'scalar'`, `'swagger-ui'`, `'redoc'`, or a function that returns the page HTML.                                                                 |
-| `uiOptions` | `{}`                                       | Passed as JSON to the UI's init call: `Scalar.createApiReference()`, `SwaggerUIBundle()` or Redoc's `init()`.                                    |
-| `cdn`       | jsDelivr, see below                        | `{ script }` for Scalar and Redoc, `{ script, style }` for Swagger UI. Replaces the default URLs, for example to serve the files from `public/`. |
-| `title`     | `info.title` from the config               | The page `<title>`.                                                                                                                              |
-| `source`    | `'file'` in production, `'live'` otherwise | `'live'` generates the document on each request. `'file'` serves the file `node ace openapi:generate` wrote.                                     |
-| `file`      | `output` from the config                   | The file `source: 'file'` reads, relative to the app root.                                                                                       |
-| `transform` | none                                       | `(document, ctx) => document`, applied to each response. It receives a copy, so it can edit the document in place.                               |
-
-The default assets come from jsDelivr, pinned to a major version:
-
-| UI           | Files                                                                           |
-| ------------ | ------------------------------------------------------------------------------- |
-| `scalar`     | `@scalar/api-reference@1/dist/browser/standalone.js`                            |
-| `swagger-ui` | `swagger-ui-dist@5/swagger-ui-bundle.js` and `swagger-ui-dist@5/swagger-ui.css` |
-| `redoc`      | `redoc@3/bundles/redoc.standalone.js`                                           |
-
-A function `ui` receives `title`, `documentUrl` and `nonce`, and returns the whole page. `documentUrl` is relative to the page. `nonce` is set when Shield's CSP is enabled.
-
-```ts
-openapiRoutes({
-  ui: ({ title, documentUrl }) => `<!doctype html>
-<title>${title}</title>
-<redoc spec-url="${documentUrl}"></redoc>
-<script type="module" src="https://cdn.redoc.ly/redoc/v3.x/bundles/redoc.standalone.js"></script>`,
-})
-```
-
-`transform` can fill in what the config cannot know, such as the host a request came to:
-
-```ts
-openapiRoutes({
-  transform: (document, { request }) => ({
-    ...document,
-    servers: [{ url: `${request.protocol()}://${request.host()}` }],
-  }),
-})
-```
-
-### Where the document comes from
-
-With `source: 'live'`, each request runs the generator in the app process. The page always matches the routes, with no command to run. The generator reads the TypeScript sources and needs `@adonisjs/assembler`, which the dev server and `node ace test` have.
-
-With `source: 'file'`, the route serves the file `node ace openapi:generate` wrote. In production, the route reads the file once and keeps it in memory. Elsewhere, it reads the file on each request. When the file is missing, the route responds with a `500` error that names `node ace openapi:generate` and the build hook.
-
-### Ship the document with the build
-
-A `node ace build` output has no TypeScript sources, and a production install has no `@adonisjs/assembler`. In production, the page serves the file instead. `node ace add` registers what writes the file and copies it into `build/`:
-
-```ts
-// adonisrc.ts
-export default defineConfig({
-  metaFiles: [{ pattern: 'openapi.json', reloadServer: false }],
-  hooks: {
-    buildStarting: [() => import('@enzopita/adonisjs-openapi/build_hook')],
-  },
-})
-```
-
-The hook runs `node ace openapi:generate` before `node ace build` compiles the app, and `metaFiles` copies `openapi.json` into `build/`. If you change `output` in the config, change the `metaFiles` pattern to match.
-
-Without the hook, you can commit the generated file and keep it in `metaFiles`. Run `node ace openapi:generate` again each time the routes change.
-
-### Protect the page
-
-A browser opens the page with a plain navigation. It sends cookies and HTTP basic credentials, but it has no way to add an `Authorization: Bearer` header. A guard that reads a bearer token, such as the access tokens guard, answers `401` to every visit from a browser. Use a guard that the browser can satisfy:
-
-- The basic auth guard. On a `401`, the browser shows its own login prompt. Serve the page over HTTPS, because basic auth sends the password with every request.
-- The session guard, if the app already has a login page.
-
-The basic auth guard needs an entry in `config/auth.ts`:
-
-```ts
-import { basicAuthGuard, basicAuthUserProvider } from '@adonisjs/auth/basic_auth'
-
-const authConfig = defineConfig({
-  guards: {
-    basic: basicAuthGuard({
-      provider: basicAuthUserProvider({ model: () => import('#models/user') }),
-    }),
-  },
-})
-```
-
-### Content Security Policy
-
-Shield's CSP is off in a new app. If you turn it on, the page needs the directives below on top of `defaultSrc: ["'self'"]`. The page sets Shield's nonce on its scripts, so `@nonce` allows them. Each UI loads in Chromium with no CSP violation under these directives.
-
-| UI           | Directives                                                                                                         |
-| ------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `scalar`     | `scriptSrc: ['@nonce']`, `styleSrc: ["'unsafe-inline'"]`, `fontSrc: ['https://fonts.scalar.com']`                  |
-| `swagger-ui` | `scriptSrc: ['@nonce']`, `styleSrc: ['https://cdn.jsdelivr.net']`, `imgSrc: ['data:']`                             |
-| `redoc`      | `scriptSrc: ['@nonce']`, `styleSrc: ["'unsafe-inline'"]`, `fontSrc: ['data:']`, `imgSrc: ['https://cdn.redoc.ly']` |
-
-Shield applies one policy to every route, so these directives apply to the whole app. A custom `cdn` replaces `https://cdn.jsdelivr.net` with the host it points to.
+A thrower key matches every call of that method. A `findOrFail()` on a row that a foreign key or a validator guarantees still documents its `404`. The response is true, because a concurrent delete can send it, and `@response` cannot remove it. Remove the key to drop it from every route.
 
 ## Document an operation
 
@@ -272,17 +180,62 @@ export default class UsersController {
 }
 ```
 
-- The first paragraph is the `summary`. The next paragraphs and `@remarks` are the `description`.
-- `@deprecated` marks the operation as deprecated.
-- `@tags Users, Admin` sets the operation tags. On the class, it applies to every method. A method's own `@tags` replaces the class tags. Without either, the tag is the first segment of the route name.
-- `@throws {SmsRejectedException} reason` adds the response of an exception class, with its status and its body. See [Exception responses](#exception-responses). A class in scope in the controller file is used as is. Any other is found by name among the classes extending `Exception` in the app's `app/**/exceptions/` folders, so it needs no import. A name that two classes share, or that none has, fails generation with `OA-T002`. One tag names one class.
-- `@throws {import('#exceptions/user_disabled_exception').default}` names a class by its module, such as one whose name another class shares. It works for any export: `import('#exceptions/errors').E_LOCKED`.
-- `@response {404} User not found` describes a status the generator already documents, such as the `404` of `findOrFail()`. It never adds a body. When nothing documents that status, generation fails with `OA-T003`.
-- `@response {502} {UpstreamError} reason` declares a status and its body when nothing can derive them. The type is a name in scope in the controller file, or `{import('#types/api').UpstreamError}`. A type that does not resolve fails generation with `OA-T007`, and so does an inline object type such as `{{ provider: string }}`: declare it as a type and name it.
-- `@throws {404}` fails generation with `OA-T001`: use `@response {404}` to describe a status, or `@throws {Class}`. So does a tag without braces, such as `@throws EmailTakenException` or `@throws 404 Not found`.
-- The reason of a tag replaces the standard status text. When several tags document one status code, their reasons are joined with `; `.
-- A tag the generator does not read, such as a misspelled `@reponse`, gets the `OA-T008` warning. Standard tags for the readers of the code are ignored without one: `@param`, `@returns`, `@return`, `@see`, `@example`, `@since`, `@internal`, `@todo`, `@override`, `@inheritDoc`, `@author`, `@version`, `@alpha`, `@beta`, `@experimental`, `@public`, `@private` and `@protected`. `@summary`, `@description` and `@exception` get the warning, with where their content goes instead.
-- `@requestBody {TypeName}` sets the request body schema from a type in scope in the controller file, or from `{import('#types/webhooks').MailEvent}`. Use it when the handler reads the body without a validator, such as a webhook payload. It replaces the body the validator would document.
+The first paragraph is the `summary`. The next paragraphs and `@remarks` are the `description`.
+
+Each tag has one meaning:
+
+| Tag                               | Meaning                                                                                                                                                                          |
+| --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@tags Users, Admin`              | The operation's tags. On the class, they apply to every method. A method's own `@tags` replaces the class tags.                                                                  |
+| `@response {404} reason`          | Describes a status the generator already documents, such as the `404` of `findOrFail()`. It never adds a body. When nothing documents that status, generation fails (`OA-T003`). |
+| `@response {502} {Type} [reason]` | Declares a status and its body that nothing can derive, such as an upstream error the handler relays.                                                                            |
+| `@throws {Class} [reason]`        | Adds the status and the body of an exception class. See [Exception responses](#exception-responses).                                                                             |
+| `@requestBody {Type}`             | The request body schema, for a handler that reads the body without a validator, such as a webhook. It replaces the body the validator would document.                            |
+| `@deprecated`                     | Marks the operation as deprecated.                                                                                                                                               |
+| `@remarks`                        | Adds a paragraph to the `description`.                                                                                                                                           |
+
+Prefer what the generator derives over a tag. An exception the action throws with `throw new`, a call `errors.throwers` names, and a middleware of the route document their status without a tag. Use `@response {N} reason` to describe such a status for one action, and describe it once on its class for every action, see [Describe a response once](#describe-a-response-once). Use `@throws {Class}` for an exception that the generator cannot see thrown, and `@response {N} {Type}` only when no class exists, such as a body the handler relays from another service.
+
+- A `{Type}` is a name in scope in the controller file, or `{import('#types/api').UpstreamError}`. A type that does not resolve fails generation with `OA-T007`, and so does an inline object type such as `{{ provider: string }}`: declare it as a type and name it.
+- `@throws {Class}` takes one class. A class in scope in the controller file is used as is. Any other is found by name among the classes extending `Exception` in the app's `app/**/exceptions/` folders, so it needs no import. A name that two classes share, or that none has, fails generation with `OA-T002`. `{import('#exceptions/user_disabled_exception').default}` names a class by its module, and works for any export: `import('#exceptions/errors').E_LOCKED`.
+- `@throws {404}`, `@throws {A | B}` and a tag without braces, such as `@throws EmailTakenException`, fail generation with `OA-T001`, which names the fix.
+- The reason of a tag replaces the description for that operation. When several tags document one status code, their reasons are joined with `; `.
+- An operation without `@tags` has no tags and gets `OA-S001`.
+- A tag the generator does not read, such as a misspelled `@reponse`, gets `OA-T008`. Standard tags for the readers of the code are ignored without one: `@param`, `@returns`, `@return`, `@see`, `@example`, `@since`, `@internal`, `@todo`, `@override`, `@inheritDoc`, `@author`, `@version`, `@alpha`, `@beta`, `@experimental`, `@public`, `@private` and `@protected`. `@summary`, `@description` and `@exception` get the warning, with where their content goes instead.
+
+## Describe a response once
+
+The first paragraph of the doc comment of a middleware or an exception class describes every response that class produces:
+
+```ts
+/**
+ * The X-Tenant-Id header is missing
+ */
+export default class TenantMiddleware {
+  async handle(ctx: HttpContext, next: NextFn) {
+    if (!ctx.request.header('x-tenant-id')) {
+      return ctx.response.badRequest({
+        code: 'E_INVALID_TENANT_HEADER' as const,
+        message: 'Missing X-Tenant-Id header',
+      })
+    }
+
+    return next()
+  }
+}
+```
+
+A response that comes only from such a class goes to `components.responses`, under the name of the class, and each operation references it:
+
+```json
+"400": { "$ref": "#/components/responses/TenantMiddleware" }
+```
+
+- A response a middleware sends belongs to the middleware. A response an exception sends belongs to the exception class, also when a middleware throws it.
+- `@response {N} reason` or `@throws {Class} reason` on the action describes the response inline for that operation instead.
+- When several sources share a status, such as a middleware's `403` and the `403` of `bouncer.authorize()`, the response stays inline. Its description joins the reasons of their classes, and the status text stands for the sources without one: `The email address of the account is not verified; Forbidden`.
+- Classes from packages, inline middleware, the handler's own responses, the `401` of a secured route and the `422` of the validator have no reason, so their responses keep the status text.
+- When two responses of the document would take one name, the second is named after its status code too, such as `LimitException_402`.
 
 ## Exception responses
 
@@ -363,22 +316,21 @@ The `401` of a secured route is the response of `E_UNAUTHORIZED_ACCESS` from `@a
 
 ## Middleware responses
 
-A middleware that ends the request documents its response on every route it runs on: the named middleware a route uses and the ones `router.use()` and `server.use()` register in `start/kernel.ts`. Its `handle()` is read like an exception's, so `response.forbidden(body)` or `response.status(403).send(body)` adds a `403` with that body. An exception it throws, such as `throw new TwoFactorRequiredException()`, adds the response of that class, and `response.abort()` and `response.redirect()` add theirs. Middleware from packages are not read: name what they throw in `errors.middleware`.
+A middleware that ends the request documents its response on every route it runs on: the named middleware a route uses, the ones `router.use()` and `server.use()` register in `start/kernel.ts`, and a function passed to the route's `.use()`. Its `handle()`, or the function, is read like an exception's, so `response.forbidden(body)` or `response.status(403).send(body)` adds a `403` with that body. An exception it throws, such as `throw new TwoFactorRequiredException()`, adds the response of that class, and `response.abort()` and `response.redirect()` add theirs. Middleware from packages are not read: name what they throw in `errors.middleware`.
 
 ```ts
-export default class TenantMiddleware {
-  async handle(ctx: HttpContext, next: NextFn) {
-    if (!ctx.request.header('x-tenant-id')) {
-      return ctx.response.badRequest({
-        code: 'E_INVALID_TENANT_HEADER' as const,
-        message: 'Missing tenant',
-      })
+router
+  .get('health/ready', [HealthChecksController, 'ready'])
+  .use(async ({ request, response }, next) => {
+    if (request.header('x-monitoring-secret') !== env.get('MONITORING_SECRET')) {
+      return response.unauthorized({ code: 'E_UNAUTHORIZED_ACCESS' as const, message: 'Denied' })
     }
 
     return next()
-  }
-}
+  })
 ```
+
+The generator finds a function passed to `.use()` in the app's sources by the source it has at runtime. `--explain` names it as `node ace list:routes` does: by its function name, or `closure`.
 
 ## Status codes
 
@@ -393,7 +345,7 @@ A response comes from each status code the handler can answer with. Branches tha
 - `204`, `205` and `304` responses, and helpers called without a body, have no `content`.
 - An exception the handler throws, with `throw new` or through a call `errors.throwers` names, adds the status of its class. A `@throws {Class}` tag does the same.
 - `@response {N} {Type}` adds its status code, and `@response {N} reason` describes one that is already there.
-- Routes that validate their input get a `422`. Routes behind a middleware mapped in `middlewareSecurity` get a `401`.
+- Routes that validate their input get a `422`. Routes behind a middleware mapped in `security.middleware` get a `401`.
 - A middleware of the route that answers with a status adds it. See [Middleware responses](#middleware-responses).
 - A handler with no typed answer gets a `200` with no schema and a warning. A handler that only answers with errors, such as `return response.tooManyRequests(body)`, gets no `200`.
 
@@ -411,22 +363,276 @@ When `.adonisjs/client/data.d.ts` exists, every type in its `Data` namespace bec
 
 ## How types become schemas
 
-- A route must have a name and a controller handler. Closure routes are skipped with a warning, except the ones `openapiRoutes()` registers.
-- On `GET` operations, the validator fields become query parameters. On other methods they become the body, and the validator's `query` and `params` objects become query and path parameters. A route that answers `GET` and `POST` gets one of each.
-- An object query parameter uses `style: deepObject`, as the app reads `filter[status]=x`.
+- A route must have a name and a controller handler. Closure routes are skipped with `OA-R001`, except the ones `openapiRoutes()` registers.
+- `request.validateUsing()` validates the request body merged with the query string, plus `params`, `headers` and `cookies`. On `GET` and `OPTIONS` operations, the validator fields become query parameters. On other methods they become the body, and the `params` object becomes the path parameters. A route that answers `GET` and `POST` gets one of each.
+- A validator field named `query` is a field like any other, which the app reads from `?query[page]=2` or from the body. It does not document `?page=2`.
+- An object query parameter uses `style: deepObject`, as the app reads `filter[status]=x`. The app reads an array only from a repeated key, `?tags=a&tags=b`.
+- A field is required unless it is `.optional()`. A `.nullable()` field is required, with `null` in its type.
 - An optional path parameter, `/users/:id?`, documents both `/users` and `/users/{id}`. The shorter path's `operationId` ends with `.without_id`.
 - A `HEAD`-only route is left out.
 - A body with a `vine.file()` field is sent as `multipart/form-data`.
 - When VineJS cannot describe a field (a file, a custom rule), the generator uses the field's TypeScript type.
 - `Date` and Luxon `DateTime` values become `{ type: 'string', format: 'date-time' }`.
 - `Map` and `Set` become an empty object and `bigint` a string, as they serialize. Symbol keys and properties typed `undefined` are left out.
-- A Lucid model returned directly becomes `{}` with a warning, because its type does not describe what `serialize()` sends. Return it through a transformer.
+- A Lucid model returned directly becomes `{}` with `OA-J002`, because its type does not describe what `serialize()` sends. Return it through a transformer.
+
+## Diagnostics
+
+Codes keep their meaning across releases. An `error` fails `openapi:generate` and `openapi:check`. A `warning` fails them only with `strict` or `--strict`.
+
+| Code      | Severity                                          | Reported when                                                                                                      | Fix                                                                                                               |
+| --------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `OA-R001` | warning                                           | A closure route, which has no types to read. The route is skipped.                                                 | Move the handler to a controller.                                                                                 |
+| `OA-R002` | warning                                           | A handler whose return type is unknown. It gets a `200` with no schema.                                            | Return `serialize(...)` or a typed value.                                                                         |
+| `OA-V001` | warning                                           | A validator whose JSON Schema cannot be read.                                                                      | Check that the module exports a VineJS validator.                                                                 |
+| `OA-T001` | error                                             | A `@throws` that names a status code, a union, or a class without braces.                                          | `@response {N} reason`, `@response {N} {Type}`, or one `@throws {Class}` per class.                               |
+| `OA-T002` | error                                             | A `@throws` class name that no exception class of the app has, or that several have. It lists them.                | Fix the name, or name the class as `import('...').default`.                                                       |
+| `OA-T003` | error                                             | A `@response {N} reason` whose status nothing documents.                                                           | Add the `errors.throwers` entry that derives it, declare the body with `@response {N} {Type}`, or remove the tag. |
+| `OA-T004` | warning                                           | A `@response` whose status is not a status code.                                                                   | Write `@response {404} reason`.                                                                                   |
+| `OA-T005` | warning                                           | A `@throws` type that is not a class, or does not resolve.                                                         | Import the class, or name it as `import('...').Export`.                                                           |
+| `OA-T006` | warning                                           | A `@throws` class with no status code.                                                                             | Give it a literal `static status`, or answer with a helper such as `response.conflict(body)` in its `handle()`.   |
+| `OA-T007` | error for `@response`, warning for `@requestBody` | A type that does not resolve, or an inline object type.                                                            | Declare it as a named type in scope, or name it as `import('...').Type`.                                          |
+| `OA-T008` | warning                                           | A tag the generator does not read, such as `@reponse`.                                                             | Use `@throws`, `@response`, `@requestBody`, `@tags`, `@deprecated` or `@remarks`.                                 |
+| `OA-E001` | warning                                           | An `errors` entry whose exception status cannot be read from its source. The entry is ignored.                     | Name a class with a numeric `status` field or `static status`.                                                    |
+| `OA-E002` | warning                                           | A package exception that renders its own body, which its declaration does not carry. It is documented without one. | Render it in an `instanceof` branch of the exception handler's `handle()`.                                        |
+| `OA-E003` | warning                                           | An `errors.throwers` or `errors.middleware` key that matches nothing in the documented routes.                     | Fix the key. See [Errors config](#errors-config).                                                                 |
+| `OA-S001` | warning                                           | An operation without tags.                                                                                         | Add `@tags` to the action or its controller class.                                                                |
+| `OA-S002` | warning                                           | A tag that `document.tags` does not declare.                                                                       | Declare it in `document.tags`.                                                                                    |
+| `OA-S003` | warning                                           | A summary longer than `rules.summaryMaxLength`.                                                                    | Shorten the first paragraph of the comment.                                                                       |
+| `OA-S004` | warning                                           | A summary whose final period breaks `rules.summaryTrailingPeriod`.                                                 | Add or remove the period.                                                                                         |
+| `OA-J001` | warning                                           | A type with no JSON Schema, emitted as `{}`.                                                                       | Return a plain data type.                                                                                         |
+| `OA-J002` | warning                                           | A Lucid model returned directly, emitted as `{}`.                                                                  | Return it through a transformer.                                                                                  |
+
+## Serve a docs page
+
+`openapiRoutes()` registers two routes: a page that renders the document with [Scalar](https://github.com/scalar/scalar), and the document itself.
+
+```ts
+// start/routes.ts
+import { middleware } from '#start/kernel'
+import { openapiRoutes } from '@enzopita/adonisjs-openapi/routes'
+
+openapiRoutes().use(middleware.auth({ guards: ['basic'] }))
+```
+
+| Route                    | Name               | Response                            |
+| ------------------------ | ------------------ | ----------------------------------- |
+| `GET /docs`              | `openapi.ui`       | The HTML page                       |
+| `GET /docs/openapi.json` | `openapi.document` | The document, as `application/json` |
+
+`openapiRoutes()` returns the route group, so `.use()`, `.domain()`, `.prefix()` and `.as()` work on it. `.as('admin')` names the routes `admin.openapi.ui` and `admin.openapi.document`.
+
+The page loads the document from a URL relative to the page, so it keeps working behind a proxy that serves the app under a path prefix. The generator leaves both routes out of the document, as it does every closure route. Tuyau keeps named closure routes, so they appear in its client registry. To leave them out, exclude them where `adonisrc.ts` calls `generateRegistry()`:
+
+```ts
+generateRegistry({ routes: { except: [/^openapi\./] } })
+```
+
+### Turn the page on or off
+
+The routes exist only where `openapiRoutes()` runs. To serve the page outside production only:
+
+```ts
+import app from '@adonisjs/core/services/app'
+
+if (!app.inProduction) openapiRoutes()
+```
+
+To turn it on with an environment variable, declare `OPENAPI_DOCS: Env.schema.boolean.optional()` in `start/env.ts`, then:
+
+```ts
+import env from '#start/env'
+
+if (env.get('OPENAPI_DOCS')) openapiRoutes().use(middleware.auth({ guards: ['basic'] }))
+```
+
+To remove the page, delete the call. No other file of the app imports `@enzopita/adonisjs-openapi/routes`.
+
+### Options
+
+| Option      | Default                                    | Description                                                                                                                                      |
+| ----------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `prefix`    | `'/docs'`                                  | Path of the page. The document is at `<prefix>/openapi.json`.                                                                                    |
+| `ui`        | `'scalar'`                                 | `'scalar'`, `'swagger-ui'`, `'redoc'`, or a function that returns the page HTML.                                                                 |
+| `uiOptions` | `{}`                                       | Passed as JSON to the UI's init call: `Scalar.createApiReference()`, `SwaggerUIBundle()` or Redoc's `init()`.                                    |
+| `cdn`       | jsDelivr, see below                        | `{ script }` for Scalar and Redoc, `{ script, style }` for Swagger UI. Replaces the default URLs, for example to serve the files from `public/`. |
+| `title`     | `info.title` from the config               | The page `<title>`.                                                                                                                              |
+| `source`    | `'file'` in production, `'live'` otherwise | `'live'` generates the document on each request. `'file'` serves the file `node ace openapi:generate` wrote.                                     |
+| `transform` | none                                       | `(document, ctx) => document`, applied to each response. It receives a copy, so it can edit the document in place.                               |
+
+The default assets come from jsDelivr, pinned to a major version:
+
+| UI           | Files                                                                           |
+| ------------ | ------------------------------------------------------------------------------- |
+| `scalar`     | `@scalar/api-reference@1/dist/browser/standalone.js`                            |
+| `swagger-ui` | `swagger-ui-dist@5/swagger-ui-bundle.js` and `swagger-ui-dist@5/swagger-ui.css` |
+| `redoc`      | `redoc@3/bundles/redoc.standalone.js`                                           |
+
+A function `ui` receives `title`, `documentUrl` and `nonce`, and returns the whole page. `documentUrl` is relative to the page. `nonce` is set when Shield's CSP is enabled.
+
+```ts
+openapiRoutes({
+  ui: ({ title, documentUrl }) => `<!doctype html>
+<title>${title}</title>
+<redoc spec-url="${documentUrl}"></redoc>
+<script type="module" src="https://cdn.redoc.ly/redoc/v3.x/bundles/redoc.standalone.js"></script>`,
+})
+```
+
+`transform` can fill in what the config cannot know, such as the host a request came to:
+
+```ts
+openapiRoutes({
+  transform: (document, { request }) => ({
+    ...document,
+    servers: [{ url: `${request.protocol()}://${request.host()}` }],
+  }),
+})
+```
+
+### Where the document comes from
+
+With `source: 'live'`, each request runs the generator in the app process. The page always matches the routes, with no command to run. The generator reads the TypeScript sources and needs `@adonisjs/assembler`, which the dev server and `node ace test` have.
+
+With `source: 'file'`, the route serves the file `node ace openapi:generate` wrote at `output`. In production, the route reads the file once and keeps it in memory. Elsewhere, it reads the file on each request. When the file is missing, the route responds with a `500` error that names `node ace openapi:generate` and the build hook.
+
+### Ship the document with the build
+
+A `node ace build` output has no TypeScript sources, and a production install has no `@adonisjs/assembler`. In production, the page serves the file instead. `node ace add` registers the build hook that writes the file:
+
+```ts
+// adonisrc.ts
+export default defineConfig({
+  hooks: {
+    buildStarting: [() => import('@enzopita/adonisjs-openapi/build_hook')],
+  },
+})
+```
+
+The hook runs `node ace openapi:generate` before `node ace build` compiles the app, and adds `output` to the files the build copies, so the document lands in `build/` at the same path. An `output` outside the app root is not copied, and the hook prints a warning.
+
+### Protect the page
+
+A browser opens the page with a plain navigation. It sends cookies and HTTP basic credentials, but it has no way to add an `Authorization: Bearer` header. A guard that reads a bearer token, such as the access tokens guard, answers `401` to every visit from a browser. Use a guard that the browser can satisfy:
+
+- The basic auth guard. On a `401`, the browser shows its own login prompt. Serve the page over HTTPS, because basic auth sends the password with every request.
+- The session guard, if the app already has a login page.
+
+The basic auth guard needs an entry in `config/auth.ts`:
+
+```ts
+import { basicAuthGuard, basicAuthUserProvider } from '@adonisjs/auth/basic_auth'
+
+const authConfig = defineConfig({
+  guards: {
+    basic: basicAuthGuard({
+      provider: basicAuthUserProvider({ model: () => import('#models/user') }),
+    }),
+  },
+})
+```
+
+### Content Security Policy
+
+Shield's CSP is off in a new app. If you turn it on, the page needs the directives below on top of `defaultSrc: ["'self'"]`. The page sets Shield's nonce on its scripts, so `@nonce` allows them. Each UI loads in Chromium with no CSP violation under these directives.
+
+| UI           | Directives                                                                                                         |
+| ------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `scalar`     | `scriptSrc: ['@nonce']`, `styleSrc: ["'unsafe-inline'"]`, `fontSrc: ['https://fonts.scalar.com']`                  |
+| `swagger-ui` | `scriptSrc: ['@nonce']`, `styleSrc: ['https://cdn.jsdelivr.net']`, `imgSrc: ['data:']`                             |
+| `redoc`      | `scriptSrc: ['@nonce']`, `styleSrc: ["'unsafe-inline'"]`, `fontSrc: ['data:']`, `imgSrc: ['https://cdn.redoc.ly']` |
+
+Shield applies one policy to every route, so these directives apply to the whole app. A custom `cdn` replaces `https://cdn.jsdelivr.net` with the host it points to.
+
+## Migrating from 0.x
+
+1.0 gives each tag one meaning and takes every body from a class. Most of the work is rewriting tags by hand, and the generator tells you which ones. Do the steps in order, and run `node ace openapi:generate` after each one.
+
+### 1. Group the config
+
+`defineConfig()` throws on a 0.x key and names where it went:
+
+| 0.x                  | 1.0                   |
+| -------------------- | --------------------- |
+| `info`               | `document.info`       |
+| `servers`            | `document.servers`    |
+| `tags`               | `document.tags`       |
+| `securitySchemes`    | `security.schemes`    |
+| `middlewareSecurity` | `security.middleware` |
+| `errorResponse`      | `errors.body`         |
+
+`openapi:generate --output` and the `file` option of `openapiRoutes()` are removed. Set `output` in the config instead. The build hook now copies `output` into the build, so you can remove the `openapi.json` entry that `node ace add` put in the `metaFiles` of `adonisrc.ts`.
+
+### 2. Name what packages throw
+
+List the package calls your actions make that throw, and add each to `errors.throwers`. Add each package middleware that throws, such as a limiter throttle, to `errors.middleware`:
+
+```ts
+import { errors as authErrors } from '@adonisjs/auth'
+import { errors as lucidErrors } from '@adonisjs/lucid'
+import { errors as bouncerErrors } from '@adonisjs/bouncer'
+import { errors as limiterErrors } from '@adonisjs/limiter'
+
+errors: {
+  throwers: {
+    'bouncer.authorize': bouncerErrors.E_AUTHORIZATION_FAILURE,
+    'findOrFail': lucidErrors.E_ROW_NOT_FOUND,
+    'firstOrFail': lucidErrors.E_ROW_NOT_FOUND,
+    'User.verifyCredentials': authErrors.E_INVALID_CREDENTIALS,
+  },
+  middleware: {
+    // limiter.define('login_ip', ...) is the login_ipThrottle of node ace list:routes.
+    login_ipThrottle: limiterErrors.E_TOO_MANY_REQUESTS,
+  },
+},
+```
+
+A key that matches no call gets `OA-E003`, so a misspelled key shows up at once.
+
+### 3. Rewrite each `@throws {N}`
+
+Generation now stops on every numeric `@throws` with `OA-T001`, and the message names the file and line. Rewrite each one in two passes:
+
+1. Replace every `@throws {N} reason` with `@response {N} reason`, with the same reason, and generate.
+2. The tags left with `OA-T003` describe a status that nothing derives. Decide each one:
+   - The status comes from a package call: add the call to `errors.throwers`, and keep the tag.
+   - The status comes from an exception class the action throws where the generator cannot see it: write `@throws {Class}`.
+   - No class exists, such as a `413` the bodyparser throws as a plain `Exception`: declare the body with `@response {413} {RequestEntityTooLarge}`, and declare that type in the controller.
+
+Then rewrite the class tags:
+
+- Split `@throws {A | B} reason` into one `@throws` per class.
+- Replace `@throws {import('#exceptions/x').default}` with the class name, unless two classes share the name (`OA-T002`).
+
+To check that the tags only describe, delete every `@response {N} reason` and generate again. The document keeps the same statuses and bodies, and only descriptions change.
+
+### 4. Move repeated reasons to their class
+
+A reason copied into many actions, such as the `400` of a tenant middleware, belongs to the middleware or exception class it comes from. Write it once as the first paragraph of the class's doc comment, and delete the copies. See [Describe a response once](#describe-a-response-once). Keep a reason on the action only when it says something specific to that action.
+
+### 5. Tag every operation
+
+An operation no longer gets a tag from its route name. Add `@tags` to each controller class, or to each action, and declare every tag in `document.tags`. `OA-S001` lists the untagged operations, and `OA-S002` the undeclared tags.
+
+### 6. Check what clients see
+
+Regenerate the document and review its diff before you regenerate clients from it:
+
+- A `.nullable()` field is now in `required`. A client that left it out gets a `422`, as it did before, and its types now say so.
+- A validator field named `query` is now a body field, not a set of query parameters.
+- Each `findOrFail()` in an action or a function it calls adds a `404` through the thrower. See [Errors config](#errors-config).
+- A response described on its class is a `$ref` to `components.responses`.
+
+### 7. Keep the document checked
+
+Commit `output`, then run `node ace openapi:check --strict` in CI and before each push. See [Run the check in CI and in a git hook](#run-the-check-in-ci-and-in-a-git-hook).
 
 ## Limitations
 
-Known cases where the document differs from what the app sends. They are tracked in [#19](https://github.com/enzopita/adonisjs-packages/issues/19); until fixed, document them with `@response` or avoid the pattern.
+Known cases where the document differs from what the app sends, or where the generator needs a tag:
 
-- A policy that denies with a status of its own, such as `AuthorizationResponse.deny('Not found', 404)`, sends that status at runtime. The generator documents the class's `403`: declare the other with `@response {404} {Type}`.
-- `download()` and `attachment()` with a path built at runtime, such as `app.makePath('report.pdf')`, are documented as `application/octet-stream`; the app sends the media type of the file's extension.
-- The paginator `metadata` fields are typed `string` by Lucid's `SimplePaginatorMetaKeys`, so they are documented as strings; the app sends numbers and `null`.
-- An array in a `GET` validator rejects a single value (`?tags=a`) with a `422`; send the key twice.
+- A policy that denies with a status of its own, such as `AuthorizationResponse.deny('Not found', 404)`, sends that status at runtime. The generator documents the class's `403`. Declare the other with `@response {404} {Type}`.
+- A package that throws a plain `Exception` with no exported class, such as the bodyparser's `413`, cannot be named in `errors`. Declare the response with `@response {N} {Type}`.
+- `download()` and `attachment()` with a path built at runtime, such as `app.makePath('report.pdf')`, are documented as `application/octet-stream`. The app sends the media type of the file's extension.
+- A thrower key matches every call of its method, so a `findOrFail()` that cannot fail still documents its `404`. See [Errors config](#errors-config).
+- The paginator `metadata` fields are typed `string` by Lucid's `SimplePaginatorMetaKeys`, so they are documented as strings. The app sends numbers and `null`. Fix the type in the app's serializer.

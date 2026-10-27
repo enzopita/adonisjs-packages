@@ -93,6 +93,16 @@ async function validatorSchemas(
   return schemas
 }
 
+/**
+ * Bodies with the same schema, such as two exceptions rendered by the same handler, appear once.
+ */
+function withBodies(response: OpenApiResponse, schemas: JsonSchema[]): OpenApiResponse {
+  const unique = [...new Map(schemas.map(schema => [JSON.stringify(schema), schema])).values()]
+  const schema = unique.length > 1 ? { oneOf: unique } : unique[0]
+
+  return schema ? { ...response, content: { 'application/json': { schema } } } : response
+}
+
 const EMPTY_STATUSES = new Set(['204', '205', '304'])
 
 const WITHOUT_BODY =
@@ -103,6 +113,7 @@ function responsesFor(
   types: RouteTypes,
   response: ts.Type | undefined,
   thrown: Record<string, ThrownResponse>,
+  answered: { code: string; body?: ts.Type }[],
   secured: boolean,
   warnings: string[],
 ) {
@@ -143,16 +154,33 @@ function responsesFor(
       ...(code === '422' && validationError ? [validationError] : []),
     ].map(body => types.schemas.convert(body))
 
-    const schema = schemas.length > 1 ? { oneOf: schemas } : schemas[0]
-
-    responses[code] = schema
-      ? { description, content: { 'application/json': { schema } } }
-      : { description }
+    responses[code] = withBodies({ description }, schemas)
   }
 
   if (validationError && !responses['422']) describe('422', validationError)
 
+  for (const { code } of answered) {
+    const bodies = answered.filter(answer => answer.code === code).flatMap(({ body }) => body ?? [])
+
+    responses[code] ??= withBodies(
+      { description: STATUS_CODES[Number(code)] ?? 'Response' },
+      bodies.map(body => types.schemas.convert(body)),
+    )
+  }
+
   if (secured && !responses['401']) describe('401')
+
+  // An error the app answers without a documented body, such as a `@throws {404}` or the 401 of a
+  // secured route, gets the body its exception handler renders.
+  const { byCode, fallback } = types.errorResponses()
+
+  for (const [code, response] of Object.entries(responses)) {
+    if (Number(code) >= 400 && !response.content)
+      responses[code] = withBodies(
+        response,
+        (byCode.get(code) ?? fallback).map(body => types.schemas.convert(body)),
+      )
+  }
 
   if (!Object.keys(responses).some(code => code.startsWith('2') || code === 'default')) {
     warnings.push(
@@ -192,7 +220,7 @@ export async function generateDocument(
   const warnings: string[] = []
   const appRoot = fileURLToPath(app.appRoot)
   const routes = await collectRoutes(appRoot, router, config)
-  const types = new RouteTypes(appRoot, routes)
+  const types = new RouteTypes(appRoot, routes, config.errorResponse)
   const vine = await validatorSchemas(app, routes, warnings)
 
   const paths: OpenApiDocument['paths'] = {}
@@ -223,7 +251,15 @@ export async function generateDocument(
     const operation: Omit<OpenApiOperation, 'operationId'> = {
       ...docs,
       tags: docs.tags ?? [route.name.split('.')[0] ?? route.name],
-      responses: responsesFor(route, types, response, thrown, security.length > 0, warnings),
+      responses: responsesFor(
+        route,
+        types,
+        response,
+        thrown,
+        types.middlewareResponses(route),
+        security.length > 0,
+        warnings,
+      ),
     }
 
     if (parameters.length) operation.parameters = parameters

@@ -58,6 +58,12 @@ export interface OpenApiConfig {
    * Maps a named middleware (as in `middleware.auth()`) to a key of `securitySchemes`.
    */
   middlewareSecurity: Record<string, string>
+  /**
+   * The body of every error response the app answers without a documented one, as a type
+   * expression such as `import('#types/api').ApiError`. Defaults to what the exception handler
+   * sends.
+   */
+  errorResponse?: string
 }
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options'

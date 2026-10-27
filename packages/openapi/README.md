@@ -60,6 +60,7 @@ export default defineConfig({
 - `info` is the OpenAPI Info Object: `title` and `version`, and optionally `summary`, `description`, `termsOfService`, `contact` and `license`.
 - `tags` is copied to the document's top-level `tags`. Use it to describe the tags operations use and to set their order.
 - `middlewareSecurity` maps a named middleware, such as `middleware.auth()`, to a key of `securitySchemes`. Routes behind it get the scheme in `security` and a `401` response. A route behind several mapped middleware, such as `middleware.auth()` and `middleware.tenant()`, requires all their schemes together: they share one Security Requirement Object.
+- `errorResponse` is the body of every error response without a documented one, as a type expression such as `"import('#types/api').ApiError"`. Without it, that body is read from the exception handler. See [Error bodies](#error-bodies).
 
 ## Serve a docs page
 
@@ -233,10 +234,11 @@ export default class UsersController {
 - The first paragraph is the `summary`. The next paragraphs and `@remarks` are the `description`.
 - `@deprecated` marks the operation as deprecated.
 - `@tags Users, Admin` sets the operation tags. On the class, it applies to every method. A method's own `@tags` replaces the class tags. Without either, the tag is the first segment of the route name.
-- `@throws {404} User not found` adds a `404` response with that description. Without a description, the standard status text is used. A tag that can't be documented, such as a name not in scope or a class with no status code, is skipped with a warning from `openapi:generate`.
+- `@throws {404} User not found` adds a `404` response with that description and the body of the [exception handler](#error-bodies). Without a description, the standard status text is used. When several tags document one status code, their descriptions are joined with `; `. A tag that can't be documented, such as a name not in scope or a class with no status code, is skipped with a warning from `openapi:generate`.
 - `@throws {SmsRejectedException}` adds the response of an exception class. See [Exception responses](#exception-responses).
 - `@throws {SmsRejectedException | InvalidAttachmentException}` adds the response of each class in the union, each under its own status code.
-- `@requestBody {TypeName}` sets the request body schema from a type in scope in the controller file. Use it when the handler reads the body without a validator, such as a webhook payload. It replaces the body the validator would document.
+- `@throws {import('#exceptions/user_disabled_exception').default}` names a class without importing it, such as one an action or a service throws. It works for any export: `import('#exceptions/errors').E_LOCKED`.
+- `@requestBody {TypeName}` sets the request body schema from a type in scope in the controller file, or from `{import('#types/webhooks').MailEvent}`. Use it when the handler reads the body without a validator, such as a webhook payload. It replaces the body the validator would document.
 
 ## Exception responses
 
@@ -277,7 +279,47 @@ export default class EmailTakenException extends Exception {
 }
 ```
 
-The class must be in scope in the controller file, usually through the import the handler throws it with. When several exceptions share a status code, or an exception uses `422` on a route that validates its input, the body schema is a `oneOf` of each body and `ValidationError`.
+The class must be in scope in the controller file, usually through the import the handler throws it with, or named with `import('...')`. When several exceptions share a status code, or an exception uses `422` on a route that validates its input, the body schema is a `oneOf` of each distinct body and `ValidationError`.
+
+A class from a package only documents a status its declaration types as a literal. `E_ROW_NOT_FOUND` from `@adonisjs/lucid/errors` declares `status: number`, so document the `404` of `findOrFail()` with `@throws {404}`.
+
+## Error bodies
+
+An error status with no body of its own, such as `@throws {404}`, the `401` of a secured route or an exception without `handle()`, gets the body the app's exception handler sends. The generator reads the handler `start/kernel.ts` registers with `server.errorHandler()`, or `#exceptions/handler`:
+
+```ts
+export default class HttpExceptionHandler extends ExceptionHandler {
+  override async renderErrorAsJSON(error: Exception, ctx: HttpContext) {
+    ctx.response
+      .status(error.status)
+      .send({ code: error.code ?? 'E_UNKNOWN', message: error.message })
+  }
+}
+```
+
+- What `handle()` and `renderErrorAsJSON()` send, with the functions of the app they call, is the body of every such status. It becomes the `Error` schema in `components.schemas`.
+- A response helper with a body, such as `ctx.response.tooManyRequests(body)` for `E_TOO_MANY_REQUESTS`, is the body of that status only.
+- A handler that overrides neither sends the framework's `{ message: string }`.
+- `errorResponse` in the config replaces all of the above.
+
+## Middleware responses
+
+A middleware that ends the request documents its response on every route it runs on: the named middleware a route uses and the ones `router.use()` and `server.use()` register in `start/kernel.ts`. Its `handle()` is read like an exception's, so `response.forbidden(body)` or `response.status(403).send(body)` adds a `403` with that body. Middleware from packages are not read.
+
+```ts
+export default class TenantMiddleware {
+  async handle(ctx: HttpContext, next: NextFn) {
+    if (!ctx.request.header('x-tenant-id')) {
+      return ctx.response.badRequest({
+        code: 'E_INVALID_TENANT_HEADER' as const,
+        message: 'Missing tenant',
+      })
+    }
+
+    return next()
+  }
+}
+```
 
 ## Status codes
 
@@ -288,6 +330,7 @@ A response comes from each status code the handler can return:
 - `204`, `205` and `304` responses, and helpers called without a body, have no `content`.
 - A `@throws` tag adds its status code when the return type has not.
 - Routes that validate their input get a `422`. Routes behind a middleware mapped in `middlewareSecurity` get a `401`.
+- A middleware of the route that answers with a status adds it. See [Middleware responses](#middleware-responses).
 
 ## Named schemas
 

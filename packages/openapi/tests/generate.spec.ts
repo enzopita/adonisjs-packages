@@ -120,10 +120,39 @@ test.group('openapi:generate on the playground app', group => {
     assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.tags, ['profile'])
   })
 
-  test('documents the status codes named by @throws', ({ assert }) => {
+  test('documents the status codes named by @throws with the exception handler body', ({
+    assert,
+  }) => {
     assert.deepEqual(document.paths['/api/v1/users/{id}']!.get!.responses['404'], {
       description: 'User not found',
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
     })
+    assert.deepEqual(document.components.schemas.Error, {
+      type: 'object',
+      properties: { code: { type: 'string' }, message: { type: 'string' } },
+      required: ['code', 'message'],
+      additionalProperties: false,
+    })
+  })
+
+  test('documents what a route middleware answers with', ({ assert }) => {
+    assert.deepEqual(document.paths['/api/v1/account/avatar']!.put!.responses['400'], {
+      description: 'Bad Request',
+      content: {
+        'application/json': {
+          schema: {
+            type: 'object',
+            properties: {
+              code: { type: 'string', const: 'E_INVALID_TENANT_HEADER' },
+              message: { type: 'string' },
+            },
+            required: ['code', 'message'],
+            additionalProperties: false,
+          },
+        },
+      },
+    })
+    assert.notProperty(document.paths['/api/v1/account/profile']!.get!.responses, '400')
   })
 
   test('documents the status and body of an exception named by @throws', ({ assert }) => {
@@ -181,6 +210,7 @@ test.group('openapi:generate on the playground app', group => {
   test('adds the 401 response to routes behind a security scheme', ({ assert }) => {
     assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.responses['401'], {
       description: 'Unauthorized',
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
     })
     assert.notProperty(document.paths['/api/v1/auth/login']!.post!.responses, '401')
   })
@@ -207,7 +237,9 @@ test.group('openapi:generate on the playground app', group => {
     )
   })
 
-  test('documents each exception of a union @throws under its own status', ({ assert }) => {
+  test('documents each exception of a union @throws under its own status, also when named by import()', ({
+    assert,
+  }) => {
     const conflict = document.paths['/api/v1/auth/signup']!.post!.responses['409']!
 
     assert.deepEqual(conflict.content!['application/json']!.schema, {

@@ -81,7 +81,7 @@ export function openapiRoutes(options: DocsOptions = {}) {
       router
         .get('/', ({ request, response }) => {
           const page = renderPage(options, {
-            title: options.title ?? openapiConfig().info.title,
+            title: options.title ?? openapiConfig().document.info.title,
             documentUrl: documentUrl(request.url()),
             nonce: cspNonce(response),
           })

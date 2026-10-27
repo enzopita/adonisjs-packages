@@ -50,7 +50,7 @@ export async function generateDocument(
       ...docs.problems.map((problem): Diagnostic => ({ ...problem, route: route.name })),
     )
 
-    const { secured, security } = securityFor(route, config.middlewareSecurity)
+    const { secured, security } = securityFor(route, config.security.middleware)
 
     const { responses, sources } = responsesFor(
       route,
@@ -86,14 +86,14 @@ export async function generateDocument(
 
   const document: OpenApiDocument = {
     openapi: '3.1.0',
-    info: config.info,
+    info: config.document.info,
     paths,
-    components: { schemas: types.schemas.components, securitySchemes: config.securitySchemes },
+    components: { schemas: types.schemas.components, securitySchemes: config.security.schemes },
   }
 
-  if (config.servers.length) document.servers = config.servers
+  if (config.document.servers.length) document.servers = config.document.servers
 
-  if (config.tags.length) document.tags = config.tags
+  if (config.document.tags.length) document.tags = config.document.tags
 
   return { document, diagnostics, provenance }
 }

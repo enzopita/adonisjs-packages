@@ -30,35 +30,57 @@ export type SecurityScheme =
   | { type: 'http'; scheme: 'bearer' | 'basic'; bearerFormat?: string; description?: string }
   | { type: 'apiKey'; name: string; in: 'header' | 'query' | 'cookie'; description?: string }
 
-export interface OpenApiConfig {
-  /**
-   * Where the document is written, relative to the app root.
-   */
-  output: string
-  info: {
-    title: string
-    version: string
-    summary?: string
-    description?: string
-    termsOfService?: string
-    contact?: { name?: string; url?: string; email?: string }
-    license?: { name: string; url?: string; identifier?: string }
-  }
+export interface DocumentInfo {
+  title: string
+  version: string
+  summary?: string
+  description?: string
+  termsOfService?: string
+  contact?: { name?: string; url?: string; email?: string }
+  license?: { name: string; url?: string; identifier?: string }
+}
+
+export interface DocumentConfig {
+  info: DocumentInfo
   servers: { url: string; description?: string }[]
   /**
    * Written as the document's top-level `tags`, to describe and order the tags operations use.
    */
   tags: { name: string; description?: string }[]
+}
+
+export interface SecurityConfig {
+  schemes: Record<string, SecurityScheme>
+  /**
+   * Maps a named middleware (as in `middleware.auth()`) to a key of `schemes`.
+   */
+  middleware: Record<string, string>
+}
+
+export interface OpenApiConfig {
+  /**
+   * Where the document is written, relative to the app root.
+   */
+  output: string
+  document: DocumentConfig
   /**
    * Same filters as Tuyau's `generateRegistry({ routes })`. Only one of them can be set.
    */
   routes: { only?: RouteMatcher[]; except?: RouteMatcher[] }
-  securitySchemes: Record<string, SecurityScheme>
-  /**
-   * Maps a named middleware (as in `middleware.auth()`) to a key of `securitySchemes`.
-   */
-  middlewareSecurity: Record<string, string>
+  security: SecurityConfig
   errors: ErrorsConfig
+}
+
+/**
+ * What `defineConfig()` takes: every key is optional, and `document` and `security` merge their
+ * keys over the defaults.
+ */
+export type OpenApiUserConfig<Errors extends ErrorsConfig = ErrorsConfig> = Partial<
+  Omit<OpenApiConfig, 'document' | 'security' | 'errors'>
+> & {
+  document?: Partial<DocumentConfig>
+  security?: Partial<SecurityConfig>
+  errors?: Errors
 }
 
 /**
@@ -141,13 +163,13 @@ export interface OpenApiOperation {
 
 export interface OpenApiDocument {
   openapi: '3.1.0'
-  info: OpenApiConfig['info']
-  servers?: OpenApiConfig['servers']
-  tags?: OpenApiConfig['tags']
+  info: DocumentInfo
+  servers?: DocumentConfig['servers']
+  tags?: DocumentConfig['tags']
   paths: Record<string, Partial<Record<HttpMethod, OpenApiOperation>>>
   components: {
     schemas: Record<string, JsonSchema>
-    securitySchemes: OpenApiConfig['securitySchemes']
+    securitySchemes: SecurityConfig['schemes']
   }
 }
 

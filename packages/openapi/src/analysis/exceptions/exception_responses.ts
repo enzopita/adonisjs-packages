@@ -30,6 +30,22 @@ function fromBranch({ answers }: HandlerBranch, codes: string[]): Thrown[] {
 }
 
 /**
+ * What the conditional branches of the exception send, joined with what it sends when it falls
+ * through them.
+ */
+function withConditional(conditional: HandlerBranch[], codes: string[], rest: Thrown[]) {
+  const thrown = new Map<string, ts.Type[]>()
+
+  for (const { code, bodies } of [
+    ...conditional.flatMap(branch => fromBranch(branch, codes)),
+    ...rest,
+  ])
+    thrown.set(code, [...(thrown.get(code) ?? []), ...bodies])
+
+  return [...thrown].map(([code, bodies]) => ({ code, bodies }))
+}
+
+/**
  * What the app sends when an exception reaches its exception handler.
  */
 export class ExceptionResponses {
@@ -60,15 +76,15 @@ export class ExceptionResponses {
   }
 
   /**
-   * The first branch whose `instanceof` names the exception, its class or a class it extends, and
-   * that sends a response: one that sends nothing, such as one that only sets a header, falls
-   * through to the next. A constant such as `E_ROW_NOT_FOUND` only matches itself: `createError()`
-   * types every constant it makes as the same `Exception`.
+   * The branches whose `instanceof` names the exception, its class or a class it extends, and that
+   * send a response, up to the first that is not conditional: one that sends nothing, such as one
+   * that only sets a header, falls through to the next. A constant such as `E_ROW_NOT_FOUND` only
+   * matches itself: `createError()` types every constant it makes as the same `Exception`.
    */
-  #branch(branches: HandlerBranch[], exception: ExceptionType) {
+  #branches(branches: HandlerBranch[], exception: ExceptionType) {
     const extended = lineage(this.#checker, exception.instance)
 
-    return branches.find(({ symbol, answers }) => {
+    const matching = branches.filter(({ symbol, answers }) => {
       if (!answers.length) return false
 
       const named =
@@ -81,6 +97,13 @@ export class ExceptionResponses {
         (named && named.flags & ts.SymbolFlags.Class && extended.has(named))
       )
     })
+
+    const last = matching.findIndex(({ conditional }) => !conditional)
+
+    return {
+      conditional: last === -1 ? matching : matching.slice(0, last),
+      branch: last === -1 ? undefined : matching[last],
+    }
   }
 
   #packagedBody(exception: ExceptionType, codes: string[]) {
@@ -100,7 +123,8 @@ export class ExceptionResponses {
    * The status is the class default, or `status` for a class a package declares. The body is what
    * an `instanceof` branch of the handler's `handle()` sends, else what the exception's own
    * `handle()` sends, else what a branch of `renderErrorAsJSON()` sends, else the generic body: the
-   * order the framework's `ExceptionHandler` runs them in.
+   * order the framework's `ExceptionHandler` runs them in. A conditional branch adds its body, and
+   * the exception goes on to the next step.
    */
   responses(exception: ExceptionType, status?: string): Thrown[] {
     const own = exceptionResponse(this.#checker, exception)
@@ -110,8 +134,19 @@ export class ExceptionResponses {
 
     if (!codes.length) return []
 
-    const handled = this.#branch(this.#handler.handled, exception)
+    const handled = this.#branches(this.#handler.handled, exception)
 
+    return withConditional(
+      handled.conditional,
+      codes,
+      this.#unhandled(exception, codes, own, handled.branch),
+    )
+  }
+
+  /**
+   * What the exception sends past the conditional branches of the handler's `handle()`.
+   */
+  #unhandled(exception: ExceptionType, codes: string[], own: Thrown[], handled?: HandlerBranch) {
     if (handled) return fromBranch(handled, codes)
 
     const handle = ownHandler(this.#checker, exception.instance)
@@ -120,9 +155,13 @@ export class ExceptionResponses {
 
     if (handle === 'unread') return this.#packagedBody(exception, codes)
 
-    const rendered = this.#branch(this.#handler.rendered, exception)
+    const rendered = this.#branches(this.#handler.rendered, exception)
 
-    return rendered ? fromBranch(rendered, codes) : bodiesFor(codes, this.generic)
+    return withConditional(
+      rendered.conditional,
+      codes,
+      rendered.branch ? fromBranch(rendered.branch, codes) : bodiesFor(codes, this.generic),
+    )
   }
 
   thrownAnswers(throws: ts.NewExpression[]): Answer[] {

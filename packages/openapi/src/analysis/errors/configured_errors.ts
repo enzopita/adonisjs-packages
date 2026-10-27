@@ -1,14 +1,12 @@
 import ts from 'typescript'
-import { exceptionType } from './exception_class.ts'
-import { declaredStatus } from './exception_status.ts'
-import type { ExceptionResponses } from './exception_responses.ts'
-import type { Thrown } from './analysis/exceptions/own_response.ts'
-import { property } from './analysis/symbols.ts'
+import { exceptionType } from '../exceptions/exception_class.ts'
+import { declaredStatus } from '../exceptions/exception_status.ts'
+import type { ExceptionResponses } from '../exceptions/exception_responses.ts'
+import type { Thrown } from '../exceptions/own_response.ts'
+import { property } from '../symbols.ts'
 import { callMatches } from './throwers.ts'
-import { entryStatusUnreadable, unmatchedKey } from './diagnostics/errors.ts'
-import type { Diagnostic, ErrorsConfig, ResponseSource, SourceLocation } from './types.ts'
-
-type Kind = 'throwers' | 'middleware'
+import { entryStatusUnreadable, unmatchedKey, type ErrorsKind } from '../../diagnostics/errors.ts'
+import type { Diagnostic, ErrorsConfig, ResponseSource, SourceLocation } from '../../types.ts'
 
 /**
  * An exception an `errors.throwers` or `errors.middleware` entry names, with its class as the
@@ -34,7 +32,7 @@ export class ConfiguredErrors {
   #config?: ts.Type
   #exceptions: ExceptionResponses
   #location: (node: ts.Node) => SourceLocation
-  #entries = new Map<Kind, ConfiguredException[]>()
+  #entries = new Map<ErrorsKind, ConfiguredException[]>()
   #matched = new Set<string>()
   #problems: Diagnostic[] = []
 
@@ -52,7 +50,7 @@ export class ConfiguredErrors {
     this.#location = location
   }
 
-  #entriesOf(kind: Kind) {
+  #entriesOf(kind: ErrorsKind) {
     const cached = this.#entries.get(kind)
 
     if (cached) return cached

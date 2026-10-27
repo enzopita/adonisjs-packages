@@ -1,14 +1,33 @@
 import ts from 'typescript'
+import { ownBodyUndeclared } from '../../diagnostics/errors.ts'
+import type { Diagnostic } from '../../types.ts'
+import type { Answer } from '../answers.ts'
 import { exceptionType, lineage, ownHandler, type ExceptionType } from './exception_class.ts'
 import {
   exceptionHandlerAnswers,
   type ExceptionHandlerAnswers,
   type HandlerBranch,
 } from './exception_handler.ts'
-import type { Answer } from './analysis/answers.ts'
-import { exceptionResponse, type Thrown } from './analysis/exceptions/own_response.ts'
-import { ownBodyUndeclared } from './diagnostics/errors.ts'
-import type { Diagnostic } from './types.ts'
+import { exceptionResponse, type Thrown } from './own_response.ts'
+
+function bodiesFor(codes: string[], bodies: ts.Type[]): Thrown[] {
+  return codes.map(code => ({ code, bodies }))
+}
+
+/**
+ * What a branch of the handler sends: with the status it sets, or else the one of the exception.
+ */
+function fromBranch({ answers }: HandlerBranch, codes: string[]): Thrown[] {
+  const thrown = new Map<string, ts.Type[]>()
+
+  for (const { code, body } of answers)
+    for (const each of code ? [code] : codes) {
+      const bodies = thrown.get(each) ?? []
+      thrown.set(each, body ? [...bodies, body] : bodies)
+    }
+
+  return [...thrown].map(([code, bodies]) => ({ code, bodies }))
+}
 
 /**
  * What the app sends when an exception reaches its exception handler.
@@ -41,26 +60,6 @@ export class ExceptionResponses {
   }
 
   /**
-   * Reads the app's exception handler. `fallback` is the generic body when the handler sends none,
-   * and replaces the handler's own when `errors.body` names it.
-   */
-  static read(
-    checker: ts.TypeChecker,
-    handler: ts.Type | undefined,
-    fallback: ts.Type,
-    configured: boolean,
-    packaged: Map<ts.Symbol, ts.Type[]>,
-  ) {
-    const answers = handler
-      ? exceptionHandlerAnswers(checker, handler)
-      : { handled: [], rendered: [], generic: [] }
-
-    const sent = configured ? [] : answers.generic.flatMap(({ body }) => body ?? [])
-
-    return new ExceptionResponses(checker, answers, sent.length ? sent : [fallback], packaged)
-  }
-
-  /**
    * The first branch whose `instanceof` names the exception, its class or a class it extends, and
    * that sends a response: one that sends nothing, such as one that only sets a header, falls
    * through to the next. A constant such as `E_ROW_NOT_FOUND` only matches itself: `createError()`
@@ -84,6 +83,19 @@ export class ExceptionResponses {
     })
   }
 
+  #packagedBody(exception: ExceptionType, codes: string[]) {
+    const packaged = exception.symbol && this.#packaged.get(exception.symbol)
+
+    if (packaged) return bodiesFor(codes, packaged)
+
+    if (!this.#undeclared.has(exception.name)) {
+      this.#undeclared.add(exception.name)
+      this.diagnostics.push(ownBodyUndeclared(exception.name))
+    }
+
+    return bodiesFor(codes, [])
+  }
+
   /**
    * The status is the class default, or `status` for a class a package declares. The body is what
    * an `instanceof` branch of the handler's `handle()` sends, else what the exception's own
@@ -98,48 +110,21 @@ export class ExceptionResponses {
 
     if (!codes.length) return []
 
-    const fromBranch = ({ answers }: HandlerBranch) => {
-      const thrown = new Map<string, ts.Type[]>()
-
-      for (const { code, body } of answers)
-        for (const each of code ? [code] : codes) {
-          const bodies = thrown.get(each) ?? []
-          thrown.set(each, body ? [...bodies, body] : bodies)
-        }
-
-      return [...thrown].map(([code, bodies]) => ({ code, bodies }))
-    }
-
     const handled = this.#branch(this.#handler.handled, exception)
 
-    if (handled) return fromBranch(handled)
+    if (handled) return fromBranch(handled, codes)
 
-    switch (ownHandler(this.#checker, exception.instance)) {
-      case 'read':
-        return own.length ? own : codes.map(code => ({ code, bodies: [] }))
-      case 'unread': {
-        const packaged = exception.symbol && this.#packaged.get(exception.symbol)
+    const handle = ownHandler(this.#checker, exception.instance)
 
-        if (packaged) return codes.map(code => ({ code, bodies: packaged }))
+    if (handle === 'read') return own.length ? own : bodiesFor(codes, [])
 
-        if (!this.#undeclared.has(exception.name)) {
-          this.#undeclared.add(exception.name)
-          this.diagnostics.push(ownBodyUndeclared(exception.name))
-        }
-
-        return codes.map(code => ({ code, bodies: [] }))
-      }
-    }
+    if (handle === 'unread') return this.#packagedBody(exception, codes)
 
     const rendered = this.#branch(this.#handler.rendered, exception)
 
-    return rendered ? fromBranch(rendered) : codes.map(code => ({ code, bodies: this.generic }))
+    return rendered ? fromBranch(rendered, codes) : bodiesFor(codes, this.generic)
   }
 
-  /**
-   * What the `throw new X()` expressions answer with. A class without a status, such as a plain
-   * `Error`, is left out.
-   */
   thrownAnswers(throws: ts.NewExpression[]): Answer[] {
     return throws.flatMap(expression => {
       const exception = exceptionType(
@@ -156,4 +141,23 @@ export class ExceptionResponses {
       )
     })
   }
+}
+
+/**
+ * Reads the app's exception handler. `errorBody.type` is the generic body when the handler sends
+ * none, and replaces the handler's own when `errors.body` names it (`overridesHandler`).
+ */
+export function readExceptionResponses(
+  checker: ts.TypeChecker,
+  handler: ts.Type | undefined,
+  errorBody: { type: ts.Type; overridesHandler: boolean },
+  packaged: Map<ts.Symbol, ts.Type[]>,
+) {
+  const answers = handler
+    ? exceptionHandlerAnswers(checker, handler)
+    : { handled: [], rendered: [], generic: [] }
+
+  const sent = errorBody.overridesHandler ? [] : answers.generic.flatMap(({ body }) => body ?? [])
+
+  return new ExceptionResponses(checker, answers, sent.length ? sent : [errorBody.type], packaged)
 }

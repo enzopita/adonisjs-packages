@@ -1,6 +1,6 @@
 import type ts from 'typescript'
 import type { ResolveModule } from '../symbols.ts'
-import type { FindException } from '../../exception_index.ts'
+import type { FindException } from '../exceptions/exception_index.ts'
 import type { Diagnostic, SourceLocation } from '../../types.ts'
 
 /**

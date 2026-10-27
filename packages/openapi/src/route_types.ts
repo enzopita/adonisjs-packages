@@ -2,15 +2,18 @@ import ts from 'typescript'
 import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { readKernel, type Kernel } from './kernel.ts'
-import { ConfiguredErrors } from './errors_config.ts'
-import { exceptionIndex, type FindException } from './exception_index.ts'
-import { ExceptionResponses } from './exception_responses.ts'
+import { ConfiguredErrors } from './analysis/errors/configured_errors.ts'
+import { exceptionIndex, type FindException } from './analysis/exceptions/exception_index.ts'
+import {
+  readExceptionResponses,
+  type ExceptionResponses,
+} from './analysis/exceptions/exception_responses.ts'
 import type { Answer } from './analysis/answers.ts'
 import { handlerResponses, type HandlerResponses } from './analysis/handler_responses.ts'
 import { operationDocs, type OperationDocs } from './analysis/tags/operation_docs.ts'
 import { defaultExport, isAppSource, property } from './analysis/symbols.ts'
 import { TypeToSchema } from './type_to_schema.ts'
-import { unauthorizedException } from './unauthorized.ts'
+import { unauthorizedException } from './analysis/exceptions/unauthorized.ts'
 import type { ErrorsConfig, RouteOperation, SourceLocation } from './types.ts'
 
 /**
@@ -153,11 +156,10 @@ export class RouteTypes {
 
     this.#unauthorized = unauthorized.exception
 
-    this.exceptions = ExceptionResponses.read(
+    this.exceptions = readExceptionResponses(
       this.checker,
       this.#defaultInstance(this.#kernel.errorHandler ?? '#exceptions/handler'),
-      this.#errorBody,
-      errors.body !== undefined,
+      { type: this.#errorBody, overridesHandler: errors.body !== undefined },
       unauthorized.packaged,
     )
     this.errors = new ConfiguredErrors(

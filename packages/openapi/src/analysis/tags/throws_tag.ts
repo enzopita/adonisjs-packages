@@ -8,7 +8,7 @@ import {
   throwsTypeUnresolved,
   throwsWithoutBraces,
 } from '../../diagnostics/tags.ts'
-import { exceptionType, type ExceptionType } from '../../exception_class.ts'
+import { exceptionType, type ExceptionType } from '../exceptions/exception_class.ts'
 import { aliased, importedSymbol, qualifiedNames } from '../symbols.ts'
 import type { TagContext } from './tag_context.ts'
 import { reasonOf, statusText, tagText } from './tag_text.ts'

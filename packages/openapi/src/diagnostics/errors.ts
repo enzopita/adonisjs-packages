@@ -1,9 +1,9 @@
 import type { Diagnostic, SourceLocation } from '../types.ts'
 
-type Kind = 'throwers' | 'middleware'
+export type ErrorsKind = 'throwers' | 'middleware'
 
 export function entryStatusUnreadable(
-  kind: Kind,
+  kind: ErrorsKind,
   key: string,
   name: string,
   location?: SourceLocation,
@@ -26,7 +26,7 @@ export function ownBodyUndeclared(name: string): Diagnostic {
   }
 }
 
-export function unmatchedKey(kind: Kind, key: string, location?: SourceLocation): Diagnostic {
+export function unmatchedKey(kind: ErrorsKind, key: string, location?: SourceLocation): Diagnostic {
   const throwers = kind === 'throwers'
 
   return {

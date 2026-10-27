@@ -1,6 +1,6 @@
 import ts from 'typescript'
 import { exceptionType } from './exception_class.ts'
-import { aliased } from './analysis/symbols.ts'
+import { aliased } from '../symbols.ts'
 
 /**
  * `E_UNAUTHORIZED_ACCESS` of `@adonisjs/auth`, which the auth middleware of a secured route throws,

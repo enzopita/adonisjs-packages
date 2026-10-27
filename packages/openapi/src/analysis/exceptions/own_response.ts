@@ -1,5 +1,5 @@
 import ts from 'typescript'
-import type { ExceptionType } from '../../exception_class.ts'
+import type { ExceptionType } from './exception_class.ts'
 import { methodBodies, responseCalls } from '../response_calls.ts'
 import { property, statusOf } from '../symbols.ts'
 

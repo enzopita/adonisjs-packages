@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import ts from 'typescript'
 import type { ExceptionType } from './exception_class.ts'
-import { aliased, statusCode, statusOf } from './analysis/symbols.ts'
+import { aliased, statusCode, statusOf } from '../symbols.ts'
 
 /**
  * Finds what an identifier in a class or a constant refers to: through the checker in the app's

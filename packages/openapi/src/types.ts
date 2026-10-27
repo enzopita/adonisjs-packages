@@ -74,6 +74,10 @@ export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options'
  */
 export interface RouteOperation {
   name: string
+  /**
+   * The route name, with a suffix on the path without an optional param, such as `users.show.without_id`.
+   */
+  operationId: string
   methods: HttpMethod[]
   path: string
   pathParams: string[]
@@ -90,6 +94,8 @@ export interface OpenApiParameter {
   in: 'path' | 'query'
   required: boolean
   schema: JsonSchema
+  style?: 'deepObject'
+  explode?: true
 }
 
 export interface OpenApiResponse {

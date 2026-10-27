@@ -321,7 +321,10 @@ function renderEntry(
 
   const imports = new Set(routes.flatMap(route => route.imports))
 
-  const members = routes.map(route => {
+  // The paths of a route with an optional param share its name and its types.
+  const named = new Map(routes.map(route => [route.name, route]))
+
+  const members = [...named.values()].map(route => {
     const request = route.requestType ? `request: ${toRelative(route.requestType)}; ` : ''
 
     const response = route.responseType

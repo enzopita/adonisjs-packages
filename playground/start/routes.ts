@@ -51,6 +51,11 @@ router
       .group(() => {
         router.get('model', [controllers.Probe, 'model'])
         router.get('collections', [controllers.Probe, 'collections'])
+        router.get('search', [controllers.Probe, 'search'])
+        router.get('items/:id?', [controllers.Probe, 'item'])
+        router.route('echo', ['GET', 'POST'], [controllers.Probe, 'echo'])
+        router.route('head', ['HEAD'], [controllers.Probe, 'head'])
+        router.get('closure', () => ({ ok: true })).as('closure')
       })
       .prefix('probe')
       .as('probe')

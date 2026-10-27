@@ -200,14 +200,20 @@ function parametersFor(route: RouteOperation, query?: JsonSchema, params?: JsonS
     schema: params?.properties?.[name] ?? { type: 'string' },
   }))
 
-  const search = Object.entries(query?.properties ?? {}).map(
-    ([name, schema]): OpenApiParameter => ({
+  const search = Object.entries(query?.properties ?? {}).map(([name, schema]): OpenApiParameter => {
+    const parameter: OpenApiParameter = {
       name,
       in: 'query',
       required: query?.required?.includes(name) ?? false,
       schema,
-    }),
-  )
+    }
+
+    // The query string parser reads an object from `filter[status]=x`.
+    const object =
+      schema.type === 'object' || (Array.isArray(schema.type) && schema.type.includes('object'))
+
+    return object ? { ...parameter, style: 'deepObject', explode: true } : parameter
+  })
 
   return [...path, ...search]
 }
@@ -219,7 +225,7 @@ export async function generateDocument(
 ): Promise<GeneratedDocument> {
   const warnings: string[] = []
   const appRoot = fileURLToPath(app.appRoot)
-  const routes = await collectRoutes(appRoot, router, config)
+  const routes = await collectRoutes(appRoot, router, config, warnings)
   const types = new RouteTypes(appRoot, routes, config.errorResponse)
   const vine = await validatorSchemas(app, routes, warnings)
 
@@ -228,18 +234,11 @@ export async function generateDocument(
   for (const route of routes) {
     const { request, response } = types.get(route.name)
     const input = request && mergeSchemas(vine.get(route.name), types.schemas.convert(request))
-    const readsQueryOnly = route.methods.every(method => method === 'get' || method === 'options')
     const fields = input && pick(input, key => !NOT_IN_BODY.has(key))
 
     const { responses: thrown, requestBody, problems, ...docs } = types.docs(route)
 
     warnings.push(...problems.map(problem => `${route.name}: ${problem}`))
-
-    const validated = readsQueryOnly ? undefined : fields
-    const body = requestBody ? types.schemas.convert(requestBody) : validated
-
-    const query = readsQueryOnly ? fields : input?.properties?.query
-    const parameters = parametersFor(route, query, input?.properties?.params)
 
     // Entries of `security` are alternatives, so the schemes a route requires together share one entry.
     const schemes = route.middleware.flatMap(name => config.middlewareSecurity[name] ?? [])
@@ -248,38 +247,48 @@ export async function generateDocument(
       ? [Object.fromEntries(schemes.map(scheme => [scheme, []]))]
       : []
 
-    const operation: Omit<OpenApiOperation, 'operationId'> = {
-      ...docs,
-      tags: docs.tags ?? [route.name.split('.')[0] ?? route.name],
-      responses: responsesFor(
-        route,
-        types,
-        response,
-        thrown,
-        types.middlewareResponses(route),
-        security.length > 0,
-        warnings,
-      ),
-    }
-
-    if (parameters.length) operation.parameters = parameters
-
-    if (security.length) operation.security = security
-
-    if (body) {
-      const mediaType = JSON.stringify(body).includes('"format":"binary"')
-        ? 'multipart/form-data'
-        : 'application/json'
-
-      operation.requestBody = { required: true, content: { [mediaType]: { schema: body } } }
-    }
+    const responses = responsesFor(
+      route,
+      types,
+      response,
+      thrown,
+      types.middlewareResponses(route),
+      security.length > 0,
+      warnings,
+    )
 
     const methods = paths[route.path] ?? {}
     paths[route.path] = methods
 
     for (const method of route.methods) {
-      const operationId = route.methods.length > 1 ? `${route.name}.${method}` : route.name
-      methods[method] = { operationId, ...operation }
+      const readsQueryOnly = method === 'get' || method === 'options'
+      const validated = readsQueryOnly ? undefined : fields
+      const body = requestBody ? types.schemas.convert(requestBody) : validated
+
+      const query = readsQueryOnly ? fields : input?.properties?.query
+      const parameters = parametersFor(route, query, input?.properties?.params)
+
+      const operation: OpenApiOperation = {
+        operationId:
+          route.methods.length > 1 ? `${route.operationId}.${method}` : route.operationId,
+        ...docs,
+        tags: docs.tags ?? [route.name.split('.')[0] ?? route.name],
+        responses,
+      }
+
+      if (parameters.length) operation.parameters = parameters
+
+      if (security.length) operation.security = security
+
+      if (body) {
+        const mediaType = JSON.stringify(body).includes('"format":"binary"')
+          ? 'multipart/form-data'
+          : 'application/json'
+
+        operation.requestBody = { required: true, content: { [mediaType]: { schema: body } } }
+      }
+
+      methods[method] = operation
     }
   }
 

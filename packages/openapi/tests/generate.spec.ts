@@ -48,7 +48,13 @@ test.group('openapi:generate on the playground app', group => {
       '/api/v1/webhooks/mail',
       '/api/v1/probe/model',
       '/api/v1/probe/collections',
+      '/api/v1/probe/search',
+      '/api/v1/probe/items',
+      '/api/v1/probe/items/{id}',
+      '/api/v1/probe/echo',
     ])
+    assert.include(logs, 'probe.closure: closure handlers have no types to read')
+    assert.notInclude(logs, 'openapi.ui')
   })
 
   test('takes body constraints from the VineJS validator', ({ assert }) => {
@@ -276,6 +282,32 @@ test.group('openapi:generate on the playground app', group => {
     assert.deepEqual(
       json(probe('collections').responses['200']),
       object({ tags: empty, counts: empty, total: { type: 'string' } }),
+    )
+  })
+
+  test('sends an object query param as a deepObject', ({ assert }) => {
+    assert.containsSubset(probe('search').parameters, [
+      { name: 'filter', in: 'query', style: 'deepObject', explode: true },
+    ])
+  })
+
+  test('documents the path without an optional param', ({ assert }) => {
+    assert.deepEqual(document.paths['/api/v1/probe/items/{id}']!.get!.parameters, [
+      { name: 'id', in: 'path', required: true, schema: { type: 'string' } },
+    ])
+    assert.isUndefined(probe('items').parameters)
+    assert.equal(probe('items').operationId, 'probe.probe.item.without_id')
+  })
+
+  test('reads the input of each method of a route on its own', ({ assert }) => {
+    assert.deepEqual(probe('echo').parameters, [
+      { name: 'message', in: 'query', required: true, schema: { type: 'string' } },
+    ])
+    assert.isUndefined(probe('echo').requestBody)
+    assert.isUndefined(probe('echo', 'post').parameters)
+    assert.deepEqual(
+      probe('echo', 'post').requestBody!.content['application/json']!.schema.properties,
+      { message: { type: 'string' } },
     )
   })
 

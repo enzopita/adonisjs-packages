@@ -72,7 +72,7 @@ export class MiddlewareResponses {
 
   /**
    * The answers of the route's middleware, and a diagnostic for each function passed to `.use()`
-   * whose answers cannot be read and no `errors.middleware` key names.
+   * whose answers cannot be read.
    */
   of(route: RouteOperation) {
     const specifiers = [
@@ -87,7 +87,7 @@ export class MiddlewareResponses {
 
       if (match.kind === 'found') return [{ middleware: name, answers: this.#read([match.body]) }]
 
-      if (this.#errors.namesMiddleware(name)) return []
+      if (match.kind === 'missing' && this.#errors.namesMiddleware(name)) return []
 
       diagnostics.push(
         match.kind === 'missing'

@@ -28,19 +28,16 @@ test.group('node ace build', () => {
 
 test.group('openapi:generate --strict', () => {
   test('writes no document when the app has a warning', async ({ assert }) => {
-    const committed = new URL('openapi.json', playground)
-    await writeFile(committed, '{}')
+    const dir = await copyPlayground(copy => writeFile(join(copy, 'openapi.json'), '{}'))
 
-    const error = await run('node', ['ace', 'openapi:generate', '--strict'], {
-      cwd: playground,
-    }).then(
+    const error = await run('node', ['ace', 'openapi:generate', '--strict'], { cwd: dir }).then(
       () => undefined,
       (failure: { stdout: string; stderr: string }) => failure,
     )
 
     assert.exists(error)
     assert.include(`${error!.stdout}${error!.stderr}`, 'The errors above block the document')
-    assert.equal(await readFile(committed, 'utf8'), '{}')
+    assert.equal(await readFile(join(dir, 'openapi.json'), 'utf8'), '{}')
   })
 })
 
@@ -113,24 +110,28 @@ test.group('openapi:generate --explain', () => {
 })
 
 test.group('openapi:check', group => {
-  const committed = new URL('openapi.json', playground)
+  let dir: string
+  let committed: string
+
+  group.setup(async () => {
+    dir = await copyPlayground(async () => {})
+    committed = join(dir, 'openapi.json')
+  })
 
   group.each.setup(async () => {
-    await run('node', ['ace', 'openapi:generate'], { cwd: playground })
+    await run('node', ['ace', 'openapi:generate'], { cwd: dir })
   })
 
   test('passes when the committed document is up to date', async ({ assert }) => {
-    const { stdout } = await run('node', ['ace', 'openapi:check'], { cwd: playground })
+    const { stdout } = await run('node', ['ace', 'openapi:check'], { cwd: dir })
 
     assert.include(stdout, 'openapi.json is up to date')
   })
 
   test('fails on the warnings of the playground with --strict only', async ({ assert }) => {
-    const { stdout } = await run('node', ['ace', 'openapi:check'], { cwd: playground })
+    const { stdout } = await run('node', ['ace', 'openapi:check'], { cwd: dir })
 
-    const error = await run('node', ['ace', 'openapi:check', '--strict'], {
-      cwd: playground,
-    }).then(
+    const error = await run('node', ['ace', 'openapi:check', '--strict'], { cwd: dir }).then(
       () => undefined,
       (failure: { stdout: string; stderr: string }) => failure,
     )
@@ -147,7 +148,7 @@ test.group('openapi:check', group => {
     document.info.version = '0.0.0'
     await writeFile(committed, JSON.stringify(document))
 
-    await run('node', ['ace', 'openapi:check'], { cwd: playground }).catch(() => undefined)
+    await run('node', ['ace', 'openapi:check'], { cwd: dir }).catch(() => undefined)
 
     assert.equal(await readFile(committed, 'utf8'), JSON.stringify(document))
   })
@@ -157,7 +158,7 @@ test.group('openapi:check', group => {
     document.info.version = '0.0.0'
     await writeFile(committed, `${JSON.stringify(document, null, 2)}\n`)
 
-    const error = await run('node', ['ace', 'openapi:check'], { cwd: playground }).then(
+    const error = await run('node', ['ace', 'openapi:check'], { cwd: dir }).then(
       () => undefined,
       (failure: { stdout: string; stderr: string }) => failure,
     )

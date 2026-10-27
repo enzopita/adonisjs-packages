@@ -53,15 +53,12 @@ export const object = (properties: Record<string, JsonSchema>): JsonSchema => ({
 let generated: Promise<{ document: OpenApiDocument; logs: string; raw: string }> | undefined
 
 /**
- * Generates the playground document once for every spec that reads it.
+ * Generates the document of a copy of the playground once for every spec that reads it.
  */
 export function generatePlayground() {
   generated ??= (async () => {
-    await run('node', ['ace', 'codegen'], { cwd: playground })
-
-    const { stdout: logs } = await run('node', ['ace', 'openapi:generate'], { cwd: playground })
-
-    const raw = await readFile(new URL('openapi.json', playground), 'utf8')
+    const { dir, output: logs } = await generateInCopy(async () => {})
+    const raw = await readFile(join(dir, 'openapi.json'), 'utf8')
     const document: OpenApiDocument = JSON.parse(raw)
 
     return { document, logs, raw }

@@ -1,4 +1,4 @@
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { BaseCommand, flags } from '@adonisjs/core/ace'
@@ -10,7 +10,8 @@ export default class GenerateOpenApi extends BaseCommand {
   static description = 'Generate an OpenAPI document from the routes, validators and transformers'
 
   @flags.string({
-    description: 'Output file, relative to the app root. Defaults to config/openapi.ts "output"',
+    description:
+      'Output file, absolute or relative to the app root. Defaults to config/openapi.ts "output"',
   })
   declare output?: string
 
@@ -41,11 +42,15 @@ export default class GenerateOpenApi extends BaseCommand {
 
     for (const warning of warnings) this.logger.warning(warning)
 
-    const output = join(fileURLToPath(this.app.appRoot), this.output ?? config.output)
+    const appRoot = fileURLToPath(this.app.appRoot)
+    const output = resolve(appRoot, this.output ?? config.output)
     await mkdir(dirname(output), { recursive: true })
     await writeFile(output, `${JSON.stringify(document, null, 2)}\n`)
 
-    this.logger.success(`OpenAPI document written to ${this.app.relativePath(output)}`, {
+    const shown = relative(appRoot, output)
+    const inside = !shown.startsWith('..') && !isAbsolute(shown)
+
+    this.logger.success(`OpenAPI document written to ${inside ? shown : output}`, {
       startTime,
     })
   }

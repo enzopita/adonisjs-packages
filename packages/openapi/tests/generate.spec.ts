@@ -1,5 +1,7 @@
 import { execFile } from 'node:child_process'
-import { readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { test } from '@japa/runner'
 import type { JsonSchema, OpenApiDocument, OpenApiResponse } from '../src/types.ts'
@@ -468,5 +470,23 @@ test.group('openapi:generate on the playground app', group => {
 
   test('writes the tags from the config', ({ assert }) => {
     assert.deepEqual(document.tags, [{ name: 'Users', description: 'Public user profiles' }])
+  })
+})
+
+test.group('openapi:generate --output', () => {
+  test('writes an absolute path as given', async ({ assert }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'openapi-'))
+    const file = join(dir, 'nested', 'openapi.json')
+
+    try {
+      const { stdout } = await run('node', ['ace', 'openapi:generate', `--output=${file}`], {
+        cwd: playground,
+      })
+
+      assert.include(stdout, `OpenAPI document written to ${file}`)
+      assert.equal(JSON.parse(await readFile(file, 'utf8')).openapi, '3.1.0')
+    } finally {
+      await rm(dir, { recursive: true })
+    }
   })
 })

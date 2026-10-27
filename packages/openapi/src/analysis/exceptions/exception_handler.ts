@@ -9,11 +9,7 @@ import { answersOf, type Answer } from '../answers.ts'
 export interface HandlerBranch {
   symbol: ts.Symbol
   answers: Answer[]
-  /**
-   * The condition also checks something else, as in `error instanceof A && error.code === 'X'`,
-   * so an `A` that fails it falls through to the next step.
-   */
-  conditional: boolean
+  fallsThrough: boolean
 }
 
 export interface ExceptionHandlerAnswers {
@@ -33,12 +29,11 @@ export interface ExceptionHandlerAnswers {
 
 /**
  * The classes a condition such as `error instanceof A || error instanceof B` names, or none when
- * one side of an `||` names no class, such as a check of a `code` or a status. An `&&` with an
- * `instanceof` on either side names its classes conditionally.
+ * one side of an `||` names no class, such as a check of a `code` or a status.
  */
-function instanceofClasses(
+export function instanceofClasses(
   condition: ts.Expression,
-): { classes: ts.Expression[]; conditional: boolean } | undefined {
+): { name: ts.Expression; fallsThrough: boolean }[] | undefined {
   while (ts.isParenthesizedExpression(condition)) condition = condition.expression
 
   if (!ts.isBinaryExpression(condition)) return undefined
@@ -46,14 +41,14 @@ function instanceofClasses(
   const operator = condition.operatorToken.kind
 
   if (operator === ts.SyntaxKind.InstanceOfKeyword)
-    return { classes: [condition.right], conditional: false }
+    return [{ name: condition.right, fallsThrough: false }]
 
   if (operator === ts.SyntaxKind.AmpersandAmpersandToken) {
-    const classes = [condition.left, condition.right].flatMap(
-      side => instanceofClasses(side)?.classes ?? [],
+    const classes = [condition.left, condition.right].flatMap(side =>
+      (instanceofClasses(side) ?? []).map(({ name }) => ({ name, fallsThrough: true })),
     )
 
-    return classes.length ? { classes, conditional: true } : undefined
+    return classes.length ? classes : undefined
   }
 
   if (operator !== ts.SyntaxKind.BarBarToken) return undefined
@@ -61,29 +56,24 @@ function instanceofClasses(
   const left = instanceofClasses(condition.left)
   const right = instanceofClasses(condition.right)
 
-  return (
-    left &&
-    right && {
-      classes: [...left.classes, ...right.classes],
-      conditional: left.conditional || right.conditional,
-    }
-  )
+  return left && right && [...left, ...right]
 }
 
 function instanceofBranches(checker: ts.TypeChecker, body: ts.Node) {
-  const branches: { symbol: ts.Symbol; body: ts.Statement; conditional: boolean }[] = []
+  const branches: { symbol: ts.Symbol; body: ts.Statement; fallsThrough: boolean }[] = []
 
   const visit = (node: ts.Node) => {
-    if (ts.isIfStatement(node)) {
-      const { classes = [], conditional = false } = instanceofClasses(node.expression) ?? {}
-
-      for (const name of classes) {
+    if (ts.isIfStatement(node))
+      for (const { name, fallsThrough } of instanceofClasses(node.expression) ?? []) {
         const symbol = checker.getSymbolAtLocation(name)
 
         if (symbol)
-          branches.push({ symbol: aliased(checker, symbol), body: node.thenStatement, conditional })
+          branches.push({
+            symbol: aliased(checker, symbol),
+            body: node.thenStatement,
+            fallsThrough,
+          })
       }
-    }
 
     ts.forEachChild(node, visit)
   }
@@ -96,7 +86,7 @@ function instanceofBranches(checker: ts.TypeChecker, body: ts.Node) {
 /**
  * What the app's exception handler answers with, read from its `handle()` and
  * `renderErrorAsJSON()`. A condition made of `instanceof` checks joined by `||` makes a branch for
- * each class, and one joined to another check by `&&` a conditional branch.
+ * each class.
  */
 export function exceptionHandlerAnswers(
   checker: ts.TypeChecker,
@@ -108,9 +98,9 @@ export function exceptionHandlerAnswers(
     const skip = new Set<ts.Node>(branches.map(({ body }) => body))
 
     return {
-      branches: branches.map(({ symbol, body, conditional }) => ({
+      branches: branches.map(({ symbol, body, fallsThrough }) => ({
         symbol,
-        conditional,
+        fallsThrough,
         answers: answersOf(checker, responseCalls(checker, [body]).calls),
       })),
       generic: answersOf(checker, responseCalls(checker, bodies, skip).calls).filter(

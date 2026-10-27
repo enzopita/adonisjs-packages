@@ -29,15 +29,11 @@ function fromBranch({ answers }: HandlerBranch, codes: string[]): Thrown[] {
   return [...thrown].map(([code, bodies]) => ({ code, bodies }))
 }
 
-/**
- * What the conditional branches of the exception send, joined with what it sends when it falls
- * through them.
- */
-function withConditional(conditional: HandlerBranch[], codes: string[], rest: Thrown[]) {
+function withFallThrough(fallThrough: HandlerBranch[], codes: string[], rest: Thrown[]) {
   const thrown = new Map<string, ts.Type[]>()
 
   for (const { code, bodies } of [
-    ...conditional.flatMap(branch => fromBranch(branch, codes)),
+    ...fallThrough.flatMap(branch => fromBranch(branch, codes)),
     ...rest,
   ])
     thrown.set(code, [...(thrown.get(code) ?? []), ...bodies])
@@ -77,7 +73,7 @@ export class ExceptionResponses {
 
   /**
    * The branches whose `instanceof` names the exception, its class or a class it extends, and that
-   * send a response, up to the first that is not conditional: one that sends nothing, such as one
+   * send a response, up to the first that does not fall through: one that sends nothing, such as one
    * that only sets a header, falls through to the next. A constant such as `E_ROW_NOT_FOUND` only
    * matches itself: `createError()` types every constant it makes as the same `Exception`.
    */
@@ -98,10 +94,10 @@ export class ExceptionResponses {
       )
     })
 
-    const last = matching.findIndex(({ conditional }) => !conditional)
+    const last = matching.findIndex(({ fallsThrough }) => !fallsThrough)
 
     return {
-      conditional: last === -1 ? matching : matching.slice(0, last),
+      fallsThrough: last === -1 ? matching : matching.slice(0, last),
       branch: last === -1 ? undefined : matching[last],
     }
   }
@@ -123,8 +119,7 @@ export class ExceptionResponses {
    * The status is the class default, or `status` for a class a package declares. The body is what
    * an `instanceof` branch of the handler's `handle()` sends, else what the exception's own
    * `handle()` sends, else what a branch of `renderErrorAsJSON()` sends, else the generic body: the
-   * order the framework's `ExceptionHandler` runs them in. A conditional branch adds its body, and
-   * the exception goes on to the next step.
+   * order the framework's `ExceptionHandler` runs them in.
    */
   responses(exception: ExceptionType, status?: string): Thrown[] {
     const own = exceptionResponse(this.#checker, exception)
@@ -136,17 +131,19 @@ export class ExceptionResponses {
 
     const handled = this.#branches(this.#handler.handled, exception)
 
-    return withConditional(
-      handled.conditional,
+    return withFallThrough(
+      handled.fallsThrough,
       codes,
-      this.#unhandled(exception, codes, own, handled.branch),
+      this.#afterFallThrough(exception, codes, own, handled.branch),
     )
   }
 
-  /**
-   * What the exception sends past the conditional branches of the handler's `handle()`.
-   */
-  #unhandled(exception: ExceptionType, codes: string[], own: Thrown[], handled?: HandlerBranch) {
+  #afterFallThrough(
+    exception: ExceptionType,
+    codes: string[],
+    own: Thrown[],
+    handled?: HandlerBranch,
+  ) {
     if (handled) return fromBranch(handled, codes)
 
     const handle = ownHandler(this.#checker, exception.instance)
@@ -157,8 +154,8 @@ export class ExceptionResponses {
 
     const rendered = this.#branches(this.#handler.rendered, exception)
 
-    return withConditional(
-      rendered.conditional,
+    return withFallThrough(
+      rendered.fallsThrough,
       codes,
       rendered.branch ? fromBranch(rendered.branch, codes) : bodiesFor(codes, this.generic),
     )

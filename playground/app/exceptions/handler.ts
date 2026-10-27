@@ -44,7 +44,6 @@ export default class HttpExceptionHandler extends ExceptionHandler {
       })
     }
 
-    // Only with the header: otherwise the exception's own handle() sends its body.
     if (
       error instanceof DisposableEmailException &&
       ctx.request.header('x-hide-domain') === 'true'

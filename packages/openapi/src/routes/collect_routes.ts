@@ -3,6 +3,7 @@ import type { RoutesListItem } from '@adonisjs/assembler/types'
 import type { Router } from '@adonisjs/core/http'
 import { closureRoute } from '../diagnostics/route.ts'
 import type { Diagnostic, HttpMethod, OpenApiConfig, RouteMatcher } from '../types.ts'
+import { locateFunctions } from './function_location.ts'
 import type { RouteOperation } from './route_operation.ts'
 
 const METHODS = new Set<string>(['get', 'post', 'put', 'patch', 'delete', 'options'])
@@ -61,12 +62,18 @@ export async function collectRoutes(
 ): Promise<RouteOperation[]> {
   const live = router.toJSON()
 
+  const routes = Object.values(live).flat()
+
+  const locations = locateFunctions(
+    routes.flatMap(route => [...route.middleware.all()].filter(entry => entry instanceof Function)),
+  )
+
   const middlewareByRoute = new Map<
     string,
     Pick<RouteOperation, 'middleware' | 'inlineMiddleware'>
   >()
 
-  for (const route of Object.values(live).flat()) {
+  for (const route of routes) {
     const entries = [...route.middleware.all()]
 
     middlewareByRoute.set(`${route.domain}:${route.pattern}:${route.methods.join(',')}`, {
@@ -74,7 +81,13 @@ export async function collectRoutes(
       // `node ace list:routes` names a function without a name `closure`.
       inlineMiddleware: entries.flatMap(entry =>
         entry instanceof Function
-          ? [{ name: entry.name || 'closure', source: entry.toString() }]
+          ? [
+              {
+                name: entry.name || 'closure',
+                source: entry.toString(),
+                location: locations.get(entry),
+              },
+            ]
           : [],
       ),
     })

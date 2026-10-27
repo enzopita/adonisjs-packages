@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { rmSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, readFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
@@ -67,6 +68,13 @@ export function generatePlayground() {
   return generated
 }
 
+const copies = new Set<string>()
+
+// Specs read a copy after it is generated, so the copies go when the test process does.
+process.once('exit', () => {
+  for (const dir of copies) rmSync(dir, { recursive: true, force: true })
+})
+
 /**
  * A copy of the playground with `overlay` laid over it, so a test can change it and write in it
  * while the playground stays as it is.
@@ -74,6 +82,8 @@ export function generatePlayground() {
 export async function copyPlayground(overlay: (dir: string) => Promise<void>) {
   const source = fileURLToPath(playground)
   const dir = await mkdtemp(join(tmpdir(), 'openapi-copy-'))
+
+  copies.add(dir)
 
   await cp(source, dir, {
     recursive: true,

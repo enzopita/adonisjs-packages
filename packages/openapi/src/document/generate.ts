@@ -6,6 +6,7 @@ import { lucidModel, noJsonSchema } from '../diagnostics/route.ts'
 import { readApp } from '../program/app_types.ts'
 import { collectRoutes } from '../routes/collect_routes.ts'
 import type { Diagnostic, GeneratedDocument, OpenApiConfig, OpenApiDocument } from '../types.ts'
+import { errorCodes } from './error_codes.ts'
 import { operationFor } from './operation.ts'
 import { operationRules } from './operation_rules.ts'
 import { ResponseComponents } from './response_components.ts'
@@ -95,6 +96,14 @@ export async function generateDocument(
       securitySchemes: config.security.schemes,
     },
   }
+
+  const codes = errorCodes(document)
+
+  if (codes.length && !('ErrorCode' in document.components.schemas))
+    document.components.schemas = {
+      ...document.components.schemas,
+      ErrorCode: { type: 'string', enum: codes },
+    }
 
   if (config.document.servers.length) document.servers = config.document.servers
 

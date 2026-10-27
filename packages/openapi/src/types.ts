@@ -281,13 +281,9 @@ export type DocsOptions = DocsUi & {
   title?: string
   /**
    * `live` generates the document on each request and needs the app's TypeScript
-   * sources. `file` serves the file `node ace openapi:generate` wrote.
+   * sources. `file` serves the file `node ace openapi:generate` wrote at the config `output`.
    */
   source?: 'live' | 'file'
-  /**
-   * The file `source: 'file'` reads, relative to the app root. Defaults to the config `output`.
-   */
-  file?: string
   transform?: (
     document: OpenApiDocument,
     ctx: HttpContext,

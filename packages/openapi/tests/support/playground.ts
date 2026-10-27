@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { cp, mkdir, mkdtemp, readFile, rm, symlink } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,8 +10,6 @@ export const playground = new URL('../../../../playground/', import.meta.url)
 export const brokenApp = new URL('../fixtures/broken_app/', import.meta.url)
 export const unauthorizedApp = new URL('../fixtures/unauthorized_app/', import.meta.url)
 export const run = promisify(execFile)
-
-const output = 'tmp/openapi.spec.json'
 
 export const json = (response: OpenApiResponse | undefined) =>
   response!.content!['application/json']!.schema
@@ -32,13 +30,10 @@ export function generatePlayground() {
   generated ??= (async () => {
     await run('node', ['ace', 'codegen'], { cwd: playground })
 
-    const { stdout: logs } = await run('node', ['ace', 'openapi:generate', `--output=${output}`], {
-      cwd: playground,
-    })
+    const { stdout: logs } = await run('node', ['ace', 'openapi:generate'], { cwd: playground })
 
-    const raw = await readFile(new URL(output, playground), 'utf8')
+    const raw = await readFile(new URL('openapi.json', playground), 'utf8')
     const document: OpenApiDocument = JSON.parse(raw)
-    await rm(new URL(output, playground))
 
     return { document, logs, raw }
   })()

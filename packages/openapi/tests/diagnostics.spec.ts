@@ -8,14 +8,19 @@ import { brokenApp, generateInCopy, json, object, unauthorizedApp } from './supp
 test.group('openapi:generate on an app whose handler renders E_UNAUTHORIZED_ACCESS', group => {
   let document: OpenApiDocument
   let dir: string
+  let output: string
 
   group.setup(async () => {
-    ;({ dir } = await generateInCopy(copy =>
+    ;({ dir, output } = await generateInCopy(copy =>
       cp(fileURLToPath(unauthorizedApp), copy, { recursive: true }),
     ))
-    document = JSON.parse(await readFile(join(dir, 'openapi.json'), 'utf8'))
+    document = JSON.parse(await readFile(join(dir, 'tmp/absolute/openapi.json'), 'utf8'))
 
     return () => rm(dir, { recursive: true })
+  })
+
+  test('writes an absolute output as given', ({ assert }) => {
+    assert.include(output, 'OpenAPI document written to tmp/absolute/openapi.json')
   })
 
   test('documents the 401 of a secured route with the body of the handler branch', ({ assert }) => {

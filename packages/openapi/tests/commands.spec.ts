@@ -1,24 +1,21 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
 import { playground, run } from './support/playground.ts'
 
-test.group('openapi:generate --output', () => {
-  test('writes an absolute path as given', async ({ assert }) => {
-    const dir = await mkdtemp(join(tmpdir(), 'openapi-'))
-    const file = join(dir, 'nested', 'openapi.json')
+test.group('node ace build', () => {
+  test('ships the document at output with the build', async ({ assert }) => {
+    const build = new URL('build/', playground)
 
     try {
-      const { stdout } = await run('node', ['ace', 'openapi:generate', `--output=${file}`], {
-        cwd: playground,
-      })
+      await run('node', ['ace', 'build'], { cwd: playground })
 
-      assert.include(stdout, `OpenAPI document written to ${file}`)
-      assert.equal(JSON.parse(await readFile(file, 'utf8')).openapi, '3.1.0')
+      assert.deepEqual(
+        JSON.parse(await readFile(new URL('openapi.json', build), 'utf8')),
+        JSON.parse(await readFile(new URL('openapi.json', playground), 'utf8')),
+      )
     } finally {
-      await rm(dir, { recursive: true })
+      await rm(build, { recursive: true, force: true })
     }
   })
 })

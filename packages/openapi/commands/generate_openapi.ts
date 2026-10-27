@@ -34,12 +34,6 @@ export default class GenerateOpenApi extends OpenApiCommand {
 
   @flags.string({
     description:
-      'Output file, absolute or relative to the app root. Defaults to config/openapi.ts "output"',
-  })
-  declare output?: string
-
-  @flags.string({
-    description:
       'Print where each response of the named route comes from, without writing the file',
   })
   declare explain?: string
@@ -70,9 +64,12 @@ export default class GenerateOpenApi extends OpenApiCommand {
     if (failed) return
 
     const appRoot = fileURLToPath(this.app.appRoot)
-    const output = resolve(appRoot, this.output ?? config.output)
+    const output = resolve(appRoot, config.output)
     await mkdir(dirname(output), { recursive: true })
     await writeFile(output, `${JSON.stringify(document, null, 2)}\n`)
+
+    // The build hook spawns this command with an IPC channel to learn which file to ship.
+    process.send?.({ openapiOutput: output })
 
     const shown = relative(appRoot, output)
     const inside = !shown.startsWith('..') && !isAbsolute(shown)

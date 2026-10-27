@@ -1,6 +1,6 @@
 import ts from 'typescript'
-import { isAppSource } from './symbols.ts'
-import { jsDoc, reasonOf } from './tags/tag_text.ts'
+import { isAppSource } from '../analysis/symbols.ts'
+import { jsDoc, reasonOf } from '../analysis/tags/tag_text.ts'
 
 /**
  * The class a response comes from, a middleware or an exception, with the reason the first

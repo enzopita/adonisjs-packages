@@ -1,6 +1,5 @@
 import type ts from 'typescript'
 import type { HandlerResponses } from '../../analysis/handler_responses.ts'
-import { responseOwner } from '../../analysis/response_owner.ts'
 import type { AppTypes } from '../../program/app_types.ts'
 import type { Diagnostic, ResponseSource } from '../../types.ts'
 import type { RouteOperation } from '../../routes/route_operation.ts'
@@ -45,6 +44,6 @@ export function addThrown(
   context.outcomes.add(code, source, {
     bodies: bodies.map(type => jsonBody(context, type)),
     reason,
-    owner: responseOwner(owner),
+    owner,
   })
 }

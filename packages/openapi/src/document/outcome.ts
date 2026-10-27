@@ -1,7 +1,8 @@
 import { STATUS_CODES } from 'node:http'
-import type { ResponseOwner } from '../analysis/response_owner.ts'
-import type { JsonSchema, OpenApiResponse, ResponseSource } from '../types.ts'
+import type ts from 'typescript'
+import type { JsonSchema, OpenApiReference, OpenApiResponse, ResponseSource } from '../types.ts'
 import type { ResponseComponents } from './response_components.ts'
+import { responseOwner, type ResponseOwner } from './response_owner.ts'
 
 export interface Body {
   mediaType: string
@@ -26,14 +27,14 @@ interface Outcome {
   /**
    * The class each contribution comes from, if any.
    */
-  owners: (ResponseOwner | undefined)[]
+  owners: (ts.Symbol | undefined)[]
 }
 
 export interface Contribution {
   bodies?: Body[]
   reason?: string
   headers?: Iterable<string>
-  owner?: ResponseOwner
+  owner?: ts.Symbol
 }
 
 const EMPTY_STATUSES = new Set(['204', '205', '304'])
@@ -42,7 +43,7 @@ const EMPTY_STATUSES = new Set(['204', '205', '304'])
  * The reasons the tags of the operation give replace the others. Else each contribution is
  * described by the class it comes from, and the status text stands for the ones without a reason.
  */
-function describe(code: string, { reasons, owners }: Outcome) {
+function describe(code: string, reasons: string[], owners: (ResponseOwner | undefined)[]) {
   const status = STATUS_CODES[Number(code)] ?? 'Response'
 
   if (reasons.length) return reasons.join('; ')
@@ -57,7 +58,7 @@ function describe(code: string, { reasons, owners }: Outcome) {
  * The class every contribution comes from, when it describes the response, which makes the
  * response shared.
  */
-function sharedOwner({ reasons, owners }: Outcome) {
+function sharedOwner(reasons: string[], owners: (ResponseOwner | undefined)[]) {
   const [first] = owners
 
   return !reasons.length && first?.reason && owners.every(owner => owner?.symbol === first.symbol)
@@ -67,10 +68,16 @@ function sharedOwner({ reasons, owners }: Outcome) {
 
 /**
  * Bodies with the same schema, such as two exceptions rendered by the same handler, appear once.
+ * A response its owner class describes is shared through `components.responses`.
  */
-function render(code: string, outcome: Outcome): OpenApiResponse {
-  const { bodies, headers, optional } = outcome
-  const description = describe(code, outcome)
+function render(
+  code: string,
+  outcome: Outcome,
+  components: ResponseComponents,
+): OpenApiResponse | OpenApiReference {
+  const { reasons, bodies, headers, optional } = outcome
+  const owners = outcome.owners.map(responseOwner)
+  const description = describe(code, reasons, owners)
 
   const response: OpenApiResponse = {
     description: optional ? `${description}, or no body` : description,
@@ -81,18 +88,22 @@ function render(code: string, outcome: Outcome): OpenApiResponse {
       [...headers].map(name => [name, { schema: { type: 'string' } }]),
     )
 
-  if (EMPTY_STATUSES.has(code) || !bodies.length) return response
+  if (!EMPTY_STATUSES.has(code) && bodies.length) {
+    const content: NonNullable<OpenApiResponse['content']> = {}
 
-  const content: NonNullable<OpenApiResponse['content']> = {}
+    for (const mediaType of new Set(bodies.map(body => body.mediaType))) {
+      const schemas = bodies.filter(body => body.mediaType === mediaType).map(body => body.schema)
+      const unique = [...new Map(schemas.map(schema => [JSON.stringify(schema), schema])).values()]
 
-  for (const mediaType of new Set(bodies.map(body => body.mediaType))) {
-    const schemas = bodies.filter(body => body.mediaType === mediaType).map(body => body.schema)
-    const unique = [...new Map(schemas.map(schema => [JSON.stringify(schema), schema])).values()]
+      content[mediaType] = { schema: unique.length > 1 ? { oneOf: unique } : unique[0]! }
+    }
 
-    content[mediaType] = { schema: unique.length > 1 ? { oneOf: unique } : unique[0]! }
+    response.content = content
   }
 
-  return { ...response, content }
+  const shared = sharedOwner(reasons, owners)
+
+  return shared ? components.ref(shared.name, code, response) : response
 }
 
 /**
@@ -151,15 +162,10 @@ export class Outcomes {
   render(components: ResponseComponents) {
     const entries = [...this.#byCode]
 
-    const rendered = ([code, found]: [string, Outcome]) => {
-      const response = render(code, found)
-      const owner = sharedOwner(found)
-
-      return [code, owner ? components.ref(owner.name, code, response) : response] as const
-    }
-
     return {
-      responses: Object.fromEntries(entries.map(rendered)),
+      responses: Object.fromEntries(
+        entries.map(([code, found]) => [code, render(code, found, components)]),
+      ),
       sources: Object.fromEntries(entries.map(([code, found]) => [code, found.sources])),
     }
   }

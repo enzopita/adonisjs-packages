@@ -1,4 +1,3 @@
-import { responseOwner } from '../../analysis/response_owner.ts'
 import { jsonBody, type ResponseContext } from './context.ts'
 
 /**
@@ -19,7 +18,7 @@ export function fromMiddleware(context: ResponseContext) {
     outcomes.add(
       code,
       { kind: 'middleware', middleware, ...(location && { location }) },
-      { bodies: body ? [jsonBody(context, body)] : [], owner: responseOwner(owner) },
+      { bodies: body ? [jsonBody(context, body)] : [], owner },
     )
 }
 

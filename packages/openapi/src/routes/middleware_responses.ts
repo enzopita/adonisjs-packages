@@ -4,7 +4,8 @@ import type { ConfiguredErrors } from '../analysis/errors/configured_errors.ts'
 import type { ExceptionResponses } from '../analysis/exceptions/exception_responses.ts'
 import { handlerResponses } from '../analysis/handler_responses.ts'
 import { methodBodies } from '../analysis/response_calls.ts'
-import type { RouteOperation, SourceLocation } from '../types.ts'
+import type { SourceLocation } from '../types.ts'
+import type { RouteOperation } from './route_operation.ts'
 import type { Kernel } from './kernel.ts'
 
 /**

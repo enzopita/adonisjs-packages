@@ -1,6 +1,7 @@
 import type { ApplicationService } from '@adonisjs/core/types'
 import { unreadableValidator } from '../diagnostics/route.ts'
-import type { Diagnostic, JsonSchema, RouteOperation } from '../types.ts'
+import type { Diagnostic, JsonSchema } from '../types.ts'
+import type { RouteOperation } from '../routes/route_operation.ts'
 
 // The keys `request.validateUsing()` adds next to the body and the query string.
 const NOT_IN_BODY = new Set(['params', 'headers', 'cookies'])

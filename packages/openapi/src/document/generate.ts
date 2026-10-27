@@ -5,22 +5,13 @@ import { operationDocs, type OperationDocs } from '../analysis/tags/operation_do
 import { lucidModel, noJsonSchema } from '../diagnostics/route.ts'
 import { readApp } from '../program/app_types.ts'
 import { collectRoutes } from '../routes/collect_routes.ts'
-import type { Diagnostic, OpenApiConfig, OpenApiDocument, ResponseSource } from '../types.ts'
+import type { Diagnostic, GeneratedDocument, OpenApiConfig, OpenApiDocument } from '../types.ts'
 import { operationFor } from './operation.ts'
 import { operationRules } from './operation_rules.ts'
 import { ResponseComponents } from './response_components.ts'
 import { responsesFor } from './responses/responses.ts'
 import { securityFor } from './security.ts'
 import { bodyFields, mergeSchemas, validatorSchemas } from './validator_schemas.ts'
-
-export interface GeneratedDocument {
-  document: OpenApiDocument
-  diagnostics: Diagnostic[]
-  /**
-   * Route name to status code to what documented that response, in the order it was read.
-   */
-  provenance: Record<string, Record<string, ResponseSource[]>>
-}
 
 const NO_DOCS: OperationDocs = { meta: {}, throws: [], responses: [], problems: [] }
 

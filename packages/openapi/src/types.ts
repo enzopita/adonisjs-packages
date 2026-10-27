@@ -133,31 +133,6 @@ export interface ErrorsConfig {
 
 export type HttpMethod = 'get' | 'post' | 'put' | 'patch' | 'delete' | 'options'
 
-/**
- * One named route as the generator sees it: where it lives, and the TypeScript
- * expressions the routes scanner extracted for its input and output.
- */
-export interface RouteOperation {
-  name: string
-  /**
-   * The route name, with a suffix on the path without an optional param, such as `users.show.without_id`.
-   */
-  operationId: string
-  methods: HttpMethod[]
-  path: string
-  pathParams: string[]
-  middleware: string[]
-  /**
-   * The functions passed to the route's `.use()`, with the source they have at runtime.
-   */
-  inlineMiddleware: { name: string; source: string }[]
-  requestType?: string
-  responseType?: string
-  imports: string[]
-  validator?: { specifier: string; exportName: string }
-  controller?: { path: string; method: string }
-}
-
 export interface OpenApiParameter {
   name: string
   in: 'path' | 'query'
@@ -280,6 +255,18 @@ export interface Diagnostic {
   message: string
   fix?: string
   location?: SourceLocation
+}
+
+/**
+ * What `generateDocument()` returns.
+ */
+export interface GeneratedDocument {
+  document: OpenApiDocument
+  diagnostics: Diagnostic[]
+  /**
+   * Route name to status code to what documented that response, in the order it was read.
+   */
+  provenance: Record<string, Record<string, ResponseSource[]>>
 }
 
 /**

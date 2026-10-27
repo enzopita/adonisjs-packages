@@ -1,4 +1,5 @@
-import type { RouteOperation, SecurityConfig } from '../types.ts'
+import type { SecurityConfig } from '../types.ts'
+import type { RouteOperation } from '../routes/route_operation.ts'
 
 /**
  * The middleware of a route that map to a scheme, and the `security` they give the operation.

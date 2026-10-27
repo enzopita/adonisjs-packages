@@ -1,7 +1,8 @@
 import type ts from 'typescript'
 import type { OperationMeta } from '../analysis/tags/operation_docs.ts'
 import type { AppTypes } from '../program/app_types.ts'
-import type { HttpMethod, JsonSchema, OpenApiOperation, RouteOperation } from '../types.ts'
+import type { HttpMethod, JsonSchema, OpenApiOperation } from '../types.ts'
+import type { RouteOperation } from '../routes/route_operation.ts'
 import { parametersFor } from './parameters.ts'
 
 export interface OperationParts {

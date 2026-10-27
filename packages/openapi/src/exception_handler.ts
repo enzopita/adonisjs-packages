@@ -24,24 +24,35 @@ export interface ExceptionHandlerAnswers {
   generic: Answer[]
 }
 
+/**
+ * The classes a condition such as `error instanceof A || error instanceof B` names, or none when
+ * it also checks something else, such as a `code` or a status, which names no class.
+ */
+function instanceofClasses(condition: ts.Expression): ts.Expression[] | undefined {
+  while (ts.isParenthesizedExpression(condition)) condition = condition.expression
+
+  if (!ts.isBinaryExpression(condition)) return undefined
+
+  if (condition.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword) return [condition.right]
+
+  if (condition.operatorToken.kind !== ts.SyntaxKind.BarBarToken) return undefined
+
+  const left = instanceofClasses(condition.left)
+  const right = instanceofClasses(condition.right)
+
+  return left && right && [...left, ...right]
+}
+
 function instanceofBranches(checker: ts.TypeChecker, body: ts.Node) {
   const branches: { symbol: ts.Symbol; body: ts.Statement }[] = []
 
   const visit = (node: ts.Node) => {
-    let condition = ts.isIfStatement(node) ? node.expression : undefined
+    if (ts.isIfStatement(node))
+      for (const name of instanceofClasses(node.expression) ?? []) {
+        const symbol = checker.getSymbolAtLocation(name)
 
-    while (condition && ts.isParenthesizedExpression(condition)) condition = condition.expression
-
-    if (
-      ts.isIfStatement(node) &&
-      condition &&
-      ts.isBinaryExpression(condition) &&
-      condition.operatorToken.kind === ts.SyntaxKind.InstanceOfKeyword
-    ) {
-      const symbol = checker.getSymbolAtLocation(condition.right)
-
-      if (symbol) branches.push({ symbol: aliased(checker, symbol), body: node.thenStatement })
-    }
+        if (symbol) branches.push({ symbol: aliased(checker, symbol), body: node.thenStatement })
+      }
 
     ts.forEachChild(node, visit)
   }
@@ -53,8 +64,8 @@ function instanceofBranches(checker: ts.TypeChecker, body: ts.Node) {
 
 /**
  * What the app's exception handler answers with, read from its `handle()` and
- * `renderErrorAsJSON()`. Only a condition that is an `instanceof` alone makes a branch: one that
- * also checks a `code` or a status names no class.
+ * `renderErrorAsJSON()`. A condition made of `instanceof` checks alone, joined by `||`, makes a
+ * branch for each class.
  */
 export function exceptionHandlerAnswers(
   checker: ts.TypeChecker,

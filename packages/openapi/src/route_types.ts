@@ -15,6 +15,7 @@ import {
 } from './operation_docs.ts'
 import type { FindException } from './throws_tag.ts'
 import { TypeToSchema } from './type_to_schema.ts'
+import { unauthorizedException } from './unauthorized.ts'
 import type { ErrorsConfig, RouteOperation, SourceLocation } from './types.ts'
 
 /**
@@ -76,7 +77,7 @@ export class RouteTypes {
   #kernelFile: ts.SourceFile
   #answers = new Map<string, Answer[]>()
   #findException: FindException
-  #unauthorizedBody?: ts.Type
+  #unauthorized: ReturnType<typeof unauthorizedException>['exception']
   readonly exceptions: ExceptionResponses
   readonly errors: ConfiguredErrors
 
@@ -148,11 +149,21 @@ export class RouteTypes {
 
     const configType = aliases.find(alias => alias.name.text === 'Config')
 
+    const unauthorized = unauthorizedException(program, this.checker, this.#kernelFile, {
+      options: config.options,
+      body: this.checker.getTypeAtLocation(
+        aliases.find(({ name }) => name.text === 'UnauthorizedBody')!,
+      ),
+    })
+
+    this.#unauthorized = unauthorized.exception
+
     this.exceptions = ExceptionResponses.read(
       this.checker,
       this.#defaultInstance(this.#kernel.errorHandler ?? '#exceptions/handler'),
       this.#errorBody,
       errors.body !== undefined,
+      unauthorized.packaged,
     )
     this.errors = new ConfiguredErrors(
       this.checker,
@@ -161,18 +172,6 @@ export class RouteTypes {
       this.exceptions,
       node => this.location(node),
     )
-
-    const auth = ts.resolveModuleName(
-      '@adonisjs/auth',
-      this.#kernelFile.fileName,
-      config.options,
-      ts.sys,
-    )
-
-    if (auth.resolvedModule)
-      this.#unauthorizedBody = this.checker.getTypeAtLocation(
-        aliases.find(alias => alias.name.text === 'UnauthorizedBody')!,
-      )
 
     const validationError = this.validationError()
     const named = new Map(this.#transformerTypes(program.getSourceFile(dataFile)))
@@ -377,11 +376,11 @@ export class RouteTypes {
   }
 
   /**
-   * `E_UNAUTHORIZED_ACCESS` from `@adonisjs/auth` renders its own body through its `handle()`,
-   * which a declaration file does not carry: this is what it sends to a client that accepts JSON.
+   * The `401` of a secured route: what `E_UNAUTHORIZED_ACCESS` from `@adonisjs/auth` renders, through
+   * a branch of the exception handler like any other exception.
    */
-  unauthorizedBody() {
-    return this.#unauthorizedBody
+  unauthorizedResponses() {
+    return this.#unauthorized ? this.exceptions.responses(this.#unauthorized, '401') : []
   }
 
   property(type: ts.Type, name: string) {

@@ -77,6 +77,7 @@ router
         router.get('hidden', [controllers.Probe, 'hidden'])
         router.get('users/:id', [controllers.Probe, 'found'])
         router.get('plan', [controllers.Probe, 'plan'])
+        router.get('seats', [controllers.Probe, 'seats'])
         router.get('maintenance', [controllers.Probe, 'maintenance'])
         router.get('upstream', [controllers.Probe, 'upstream'])
         router.get('throttled', [controllers.Probe, 'text']).as('throttled').use(throttle)

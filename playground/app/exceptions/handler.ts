@@ -4,6 +4,8 @@ import { errors as limiterErrors } from '@adonisjs/limiter'
 import type { Exception } from '@adonisjs/core/exceptions'
 import { type HttpContext, ExceptionHandler } from '@adonisjs/core/http'
 import PlanLimitException from '#exceptions/plan_limit_exception'
+import SeatLimitException from '#exceptions/seat_limit_exception'
+import MaintenanceException from '#exceptions/maintenance_exception'
 
 export default class HttpExceptionHandler extends ExceptionHandler {
   /**
@@ -33,12 +35,17 @@ export default class HttpExceptionHandler extends ExceptionHandler {
       })
     }
 
-    if (error instanceof PlanLimitException) {
+    if (error instanceof PlanLimitException || error instanceof SeatLimitException) {
       return ctx.response.status(error.status).send({
-        code: 'E_PLAN_LIMIT' as const,
+        code: error.code ?? 'E_LIMIT',
         message: error.message,
         upgradeUrl: '/billing',
       })
+    }
+
+    // Sends nothing, so super.handle() renders the body.
+    if (error instanceof MaintenanceException) {
+      ctx.response.header('Retry-After', '300')
     }
 
     return super.handle(error, ctx)

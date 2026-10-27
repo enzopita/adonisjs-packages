@@ -1,3 +1,4 @@
+import User from '#models/user'
 import type { HttpContext } from '@adonisjs/core/http'
 
 /**
@@ -53,7 +54,8 @@ export default class BrokenController {
     return { ok: true }
   }
 
-  async unread({ auth }: HttpContext) {
-    return { id: auth.getUserOrFail().id }
+  async unread({ request }: HttpContext) {
+    const user = await User.verifyCredentials(request.input('email'), request.input('password'))
+    return { id: user.id }
   }
 }

@@ -19,14 +19,25 @@ export class ExceptionResponses {
    */
   readonly generic: ts.Type[]
   /**
+   * The bodies a package exception's own `handle()` sends, which its declaration file does not
+   * carry, by the symbol of its class.
+   */
+  #packaged: Map<ts.Symbol, ts.Type[]>
+  /**
    * The `OA-E002` the exceptions read so far raised, once per class.
    */
   readonly diagnostics: Diagnostic[] = []
 
-  constructor(checker: ts.TypeChecker, handler: ExceptionHandlerAnswers, generic: ts.Type[]) {
+  constructor(
+    checker: ts.TypeChecker,
+    handler: ExceptionHandlerAnswers,
+    generic: ts.Type[],
+    packaged: Map<ts.Symbol, ts.Type[]>,
+  ) {
     this.#checker = checker
     this.#handler = handler
     this.generic = generic
+    this.#packaged = packaged
   }
 
   /**
@@ -38,6 +49,7 @@ export class ExceptionResponses {
     handler: ts.Type | undefined,
     fallback: ts.Type,
     configured: boolean,
+    packaged: Map<ts.Symbol, ts.Type[]>,
   ) {
     const answers = handler
       ? exceptionHandlerAnswers(checker, handler)
@@ -45,18 +57,21 @@ export class ExceptionResponses {
 
     const sent = configured ? [] : answers.generic.flatMap(({ body }) => body ?? [])
 
-    return new ExceptionResponses(checker, answers, sent.length ? sent : [fallback])
+    return new ExceptionResponses(checker, answers, sent.length ? sent : [fallback], packaged)
   }
 
   /**
-   * The first branch whose `instanceof` names the exception, its class or a class it extends. A
-   * constant such as `E_ROW_NOT_FOUND` only matches itself: `createError()` types every constant
-   * it makes as the same `Exception`.
+   * The first branch whose `instanceof` names the exception, its class or a class it extends, and
+   * that sends a response: one that sends nothing, such as one that only sets a header, falls
+   * through to the next. A constant such as `E_ROW_NOT_FOUND` only matches itself: `createError()`
+   * types every constant it makes as the same `Exception`.
    */
   #branch(branches: HandlerBranch[], exception: ExceptionType) {
     const extended = lineage(this.#checker, exception.instance)
 
-    return branches.find(({ symbol }) => {
+    return branches.find(({ symbol, answers }) => {
+      if (!answers.length) return false
+
       const named =
         symbol.flags & ts.SymbolFlags.Class
           ? symbol
@@ -92,9 +107,7 @@ export class ExceptionResponses {
           thrown.set(each, body ? [...bodies, body] : bodies)
         }
 
-      return thrown.size
-        ? [...thrown].map(([code, bodies]) => ({ code, bodies }))
-        : codes.map(code => ({ code, bodies: [] }))
+      return [...thrown].map(([code, bodies]) => ({ code, bodies }))
     }
 
     const handled = this.#branch(this.#handler.handled, exception)
@@ -104,7 +117,11 @@ export class ExceptionResponses {
     switch (ownHandler(this.#checker, exception.instance)) {
       case 'read':
         return own.length ? own : codes.map(code => ({ code, bodies: [] }))
-      case 'unread':
+      case 'unread': {
+        const packaged = exception.symbol && this.#packaged.get(exception.symbol)
+
+        if (packaged) return codes.map(code => ({ code, bodies: packaged }))
+
         if (!this.diagnostics.some(({ message }) => message.startsWith(`${exception.name} `)))
           this.diagnostics.push({
             code: 'OA-E002',
@@ -114,6 +131,7 @@ export class ExceptionResponses {
           })
 
         return codes.map(code => ({ code, bodies: [] }))
+      }
     }
 
     const rendered = this.#branch(this.#handler.rendered, exception)

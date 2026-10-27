@@ -293,13 +293,14 @@ function responsesFor(
   }
 
   if (secured.length) {
-    const auth = types.unauthorizedBody()
     const found = outcome('401')
 
     found.sources.push(
       ...secured.map((middleware): ResponseSource => ({ kind: 'security', middleware })),
     )
-    found.bodies.push(...(auth ? [json(auth)] : []))
+
+    for (const { code, bodies } of types.unauthorizedResponses())
+      if (code === '401') found.bodies.push(...bodies.map(json))
   }
 
   const { apply, underived } = applicable(docs.responses, code => outcomes.has(code))

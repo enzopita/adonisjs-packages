@@ -1639,8 +1639,63 @@
                   "type": "object",
                   "properties": {
                     "code": {
-                      "type": "string",
-                      "const": "E_PLAN_LIMIT"
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "upgradeUrl": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message",
+                    "upgradeUrl"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/probe/seats": {
+      "get": {
+        "operationId": "probe.probe.seats",
+        "tags": [
+          "probe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "added": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "added"
+                  ]
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "Payment Required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
                     },
                     "message": {
                       "type": "string"

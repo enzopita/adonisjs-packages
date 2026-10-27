@@ -7,6 +7,7 @@ import ProbePolicy from '#policies/probe_policy'
 import EmailTakenException from '#exceptions/email_taken_exception'
 import PlanLimitException from '#exceptions/plan_limit_exception'
 import MaintenanceException from '#exceptions/maintenance_exception'
+import SeatLimitException from '#exceptions/seat_limit_exception'
 import { echoProbeValidator, searchProbeValidator } from '#validators/probe'
 import type { HttpContext } from '@adonisjs/core/http'
 
@@ -149,6 +150,11 @@ export default class ProbeController {
   async plan({ request }: HttpContext) {
     if (request.input('probes', 0) >= 3) throw new PlanLimitException('Upgrade to add more probes')
     return { created: true }
+  }
+
+  async seats({ request }: HttpContext) {
+    if (request.input('seats', 0) >= 5) throw new SeatLimitException('Upgrade to add more seats')
+    return { added: true }
   }
 
   async maintenance({ request }: HttpContext) {

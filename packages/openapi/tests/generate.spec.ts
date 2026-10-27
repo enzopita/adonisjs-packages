@@ -11,6 +11,7 @@ const playground = new URL('../../../playground/', import.meta.url)
 const output = 'tmp/openapi.spec.json'
 const golden = new URL('fixtures/playground.openapi.json', import.meta.url)
 const brokenApp = new URL('fixtures/broken_app/', import.meta.url)
+const unauthorizedApp = new URL('fixtures/unauthorized_app/', import.meta.url)
 const run = promisify(execFile)
 
 const json = (response: OpenApiResponse | undefined) =>
@@ -85,6 +86,7 @@ test.group('openapi:generate on the playground app', group => {
       '/api/v1/probe/hidden',
       '/api/v1/probe/users/{id}',
       '/api/v1/probe/plan',
+      '/api/v1/probe/seats',
       '/api/v1/probe/maintenance',
       '/api/v1/probe/upstream',
       '/api/v1/probe/throttled',
@@ -273,29 +275,10 @@ test.group('openapi:generate on the playground app', group => {
   test('adds the 401 response E_UNAUTHORIZED_ACCESS renders to routes behind a security scheme', ({
     assert,
   }) => {
-    assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.responses['401'], {
-      description: 'Unauthorized',
-      content: {
-        'application/json': {
-          schema: {
-            type: 'object',
-            properties: {
-              errors: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: { message: { type: 'string' } },
-                  additionalProperties: false,
-                  required: ['message'],
-                },
-              },
-            },
-            additionalProperties: false,
-            required: ['errors'],
-          },
-        },
-      },
-    })
+    assert.deepEqual(
+      json(document.paths['/api/v1/account/profile']!.get!.responses['401']),
+      object({ errors: { type: 'array', items: object({ message: { type: 'string' } }) } }),
+    )
     assert.notProperty(document.paths['/api/v1/auth/login']!.post!.responses, '401')
   })
 
@@ -521,17 +504,24 @@ test.group('openapi:generate on the playground app', group => {
   test('renders an exception without a body of its own as the handler does for its class', ({
     assert,
   }) => {
-    assert.deepEqual(
-      json(probe('plan').responses['402']),
-      object({
-        code: { type: 'string', const: 'E_PLAN_LIMIT' },
-        message: { type: 'string' },
-        upgradeUrl: { type: 'string' },
-      }),
-    )
+    const limit = object({
+      code: { type: 'string' },
+      message: { type: 'string' },
+      upgradeUrl: { type: 'string' },
+    })
+
+    assert.deepEqual(json(probe('plan').responses['402']), limit)
+    assert.deepEqual(json(probe('seats').responses['402']), limit)
+  })
+
+  test('falls through a handler branch that sends nothing', ({ assert }) => {
     assert.deepEqual(json(probe('maintenance').responses['503']), {
       $ref: '#/components/schemas/Error',
     })
+    assert.deepEqual(
+      document.components.schemas.Error,
+      object({ code: { type: 'string' }, message: { type: 'string' } }),
+    )
   })
 
   test('emits {} and a warning for a Lucid model', ({ assert }) => {
@@ -686,31 +676,64 @@ test.group('openapi:check', group => {
   })
 })
 
+/**
+ * A copy of the playground with `overlay` laid over it, so the playground stays valid. Returns the
+ * copy's directory and what `openapi:generate` printed.
+ */
+async function generateInCopy(overlay: (dir: string) => Promise<void>) {
+  const source = fileURLToPath(playground)
+  const dir = await mkdtemp(join(tmpdir(), 'openapi-copy-'))
+
+  await cp(source, dir, {
+    recursive: true,
+    filter: path =>
+      !/^(node_modules|tmp|build|\.adonisjs|openapi\.json)(\/|$)/.test(relative(source, path)),
+  })
+  await symlink(join(source, 'node_modules'), join(dir, 'node_modules'))
+  await mkdir(join(dir, 'tmp'))
+  await overlay(dir)
+  await run('node', ['ace', 'codegen'], { cwd: dir })
+
+  const result = await run('node', ['ace', 'openapi:generate'], { cwd: dir }).then(
+    success => success,
+    (error: { stdout: string; stderr: string }) => error,
+  )
+
+  return { dir, output: `${result.stdout}${result.stderr}` }
+}
+
+test.group('openapi:generate on an app whose handler renders E_UNAUTHORIZED_ACCESS', group => {
+  let document: OpenApiDocument
+  let dir: string
+
+  group.setup(async () => {
+    ;({ dir } = await generateInCopy(copy =>
+      cp(fileURLToPath(unauthorizedApp), copy, { recursive: true }),
+    ))
+    document = JSON.parse(await readFile(join(dir, 'openapi.json'), 'utf8'))
+
+    return () => rm(dir, { recursive: true })
+  })
+
+  test('documents the 401 of a secured route with the body of the handler branch', ({ assert }) => {
+    assert.deepEqual(
+      json(document.paths['/api/v1/account/profile']!.get!.responses['401']),
+      object({
+        code: { type: 'string', const: 'E_UNAUTHORIZED_ACCESS' },
+        message: { type: 'string' },
+      }),
+    )
+  })
+})
+
 test.group('openapi:generate on an app whose tags are wrong', group => {
   let output: string
   let dir: string
 
-  // A copy of the playground with tests/fixtures/broken_app laid over it, so the playground stays valid.
   group.setup(async () => {
-    const source = fileURLToPath(playground)
-    dir = await mkdtemp(join(tmpdir(), 'openapi-broken-'))
-
-    await cp(source, dir, {
-      recursive: true,
-      filter: path =>
-        !/^(node_modules|tmp|build|\.adonisjs|openapi\.json)(\/|$)/.test(relative(source, path)),
-    })
-    await symlink(join(source, 'node_modules'), join(dir, 'node_modules'))
-    await mkdir(join(dir, 'tmp'))
-    await cp(fileURLToPath(brokenApp), dir, { recursive: true })
-    await run('node', ['ace', 'codegen'], { cwd: dir })
-
-    const failure = await run('node', ['ace', 'openapi:generate'], { cwd: dir }).then(
-      () => undefined,
-      (error: { stdout: string; stderr: string }) => error,
-    )
-
-    output = failure ? `${failure.stdout}${failure.stderr}` : ''
+    ;({ dir, output } = await generateInCopy(copy =>
+      cp(fileURLToPath(brokenApp), copy, { recursive: true }),
+    ))
 
     return () => rm(dir, { recursive: true })
   })
@@ -756,6 +779,6 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
   test('warns that a package exception renders a body its declaration does not carry', ({
     assert,
   }) => {
-    assert.include(output, 'OA-E002 E_UNAUTHORIZED_ACCESS renders its own body')
+    assert.include(output, 'OA-E002 E_INVALID_CREDENTIALS renders its own body')
   })
 })

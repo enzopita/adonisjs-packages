@@ -628,7 +628,7 @@ test.group('openapi:generate --explain', () => {
       gated.stdout,
       'bouncer.authorize() throws E_AUTHORIZATION_FAILURE (app/controllers/probe_controller.ts:',
     )
-    assert.include(throttled.stdout, 'the middleware #start/limiter (config/openapi.ts:')
+    assert.include(throttled.stdout, 'the middleware globalThrottle (config/openapi.ts:')
   })
 
   test('names the middleware that secures a route', async ({ assert }) => {
@@ -780,5 +780,22 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
     assert,
   }) => {
     assert.include(output, 'OA-E002 E_INVALID_CREDENTIALS renders its own body')
+  })
+
+  test('reads the status of an errors entry without running its class', ({ assert }) => {
+    assert.notInclude(output, 'LedgerException constructed')
+    assert.notInclude(output, "errors.throwers['ledger.reject']")
+    assert.notInclude(output, "errors.throwers['verifyCredentials']")
+  })
+
+  test('warns about an errors key that matches nothing', ({ assert }) => {
+    assert.include(
+      output,
+      "OA-E003 errors.throwers['bouncer.authorise'] matches no call of the documented routes",
+    )
+    assert.include(
+      output,
+      "OA-E003 errors.middleware['#start/limiter'] matches no middleware of the documented routes: name the middleware as `node ace list:routes` shows it",
+    )
   })
 })

@@ -1,46 +1,22 @@
 import ts from 'typescript'
-import { exceptionType, type ExceptionType } from './exception_class.ts'
+import { exceptionType } from './exception_class.ts'
+import { declaredStatus } from './exception_status.ts'
 import type { ExceptionResponses } from './exception_responses.ts'
 import type { Thrown } from './operation_docs.ts'
 import { callMatches } from './throwers.ts'
-import type {
-  Diagnostic,
-  ErrorsConfig,
-  ExceptionClass,
-  ResponseSource,
-  SourceLocation,
-} from './types.ts'
+import type { Diagnostic, ErrorsConfig, ResponseSource, SourceLocation } from './types.ts'
 
 type Kind = 'throwers' | 'middleware'
 
 /**
- * An exception an `errors.throwers` or `errors.middleware` entry names: its class as the type of
- * the config reads it, and its status as the class holds it at runtime, since a package declares
- * it as a `number`.
+ * An exception an `errors.throwers` or `errors.middleware` entry names, with its class as the
+ * type of the config reads it and the responses that class gives.
  */
 export interface ConfiguredException {
   key: string
   name: string
-  exception?: ExceptionType
-  status?: string
+  responses: Thrown[]
   location?: SourceLocation
-}
-
-/**
- * The status an exception of the class has when nothing overrides it. `@adonisjs/bouncer` and
- * `@adonisjs/limiter` set it in a class field, which only an instance carries.
- */
-function defaultStatus(exception: ExceptionClass) {
-  // An exception's constructor only stores what it is given, so placeholders build one.
-  for (const args of [[{}, {}], []]) {
-    try {
-      const { status }: { status?: number } = Reflect.construct(exception, args)
-
-      if (status !== undefined) return status
-    } catch {}
-  }
-
-  return exception.status
 }
 
 /**
@@ -57,10 +33,8 @@ export class ConfiguredErrors {
   #exceptions: ExceptionResponses
   #location: (node: ts.Node) => SourceLocation
   #entries = new Map<Kind, ConfiguredException[]>()
-  /**
-   * The `OA-E001` the entries raised.
-   */
-  readonly diagnostics: Diagnostic[] = []
+  #matched = new Set<string>()
+  #problems: Diagnostic[] = []
 
   constructor(
     checker: ts.TypeChecker,
@@ -103,22 +77,21 @@ export class ConfiguredErrors {
             initializer && this.#checker.getSymbolAtLocation(initializer),
           ) ?? exceptionType(this.#checker, symbol)
 
-        const status = defaultStatus(value)
+        const status = exception && declaredStatus(this.#checker, exception)
 
         const entry: ConfiguredException = {
           key,
           name: exception?.name ?? (value.name || key),
-          ...(exception && { exception }),
-          ...(status !== undefined && { status: String(status) }),
+          responses: exception ? this.#exceptions.responses(exception, status) : [],
           ...(declaration && { location: this.#location(declaration) }),
         }
 
-        if (!entry.status)
-          this.diagnostics.push({
+        if (!entry.responses.length)
+          this.#problems.push({
             code: 'OA-E001',
             severity: 'warning',
-            message: `errors.${kind}['${key}']: ${entry.name} has no status code, the entry is ignored`,
-            fix: 'name an exception class with a numeric `static status`',
+            message: `errors.${kind}['${key}']: the status of ${entry.name} cannot be read, the entry is ignored`,
+            fix: 'name an exception class with a numeric `status` field or `static status`',
             ...(entry.location && { location: entry.location }),
           })
 
@@ -131,12 +104,30 @@ export class ConfiguredErrors {
     return entries
   }
 
-  #responses({ exception, status }: ConfiguredException): Thrown[] {
-    if (!status) return []
+  /**
+   * The `OA-E001` the entries raised, and an `OA-E003` for each key no route matched, such as a
+   * misspelled `bouncer.authorise`. Read once every route is documented.
+   */
+  get diagnostics(): Diagnostic[] {
+    const unmatched = (['throwers', 'middleware'] as const).flatMap(kind =>
+      this.#entriesOf(kind)
+        .filter(({ key }) => !this.#matched.has(`${kind}:${key}`))
+        .map(({ key, location }): Diagnostic => ({
+          code: 'OA-E003',
+          severity: 'warning',
+          message:
+            kind === 'throwers'
+              ? `errors.throwers['${key}'] matches no call of the documented routes`
+              : `errors.middleware['${key}'] matches no middleware of the documented routes`,
+          fix:
+            kind === 'throwers'
+              ? 'name the method, such as `findOrFail`, or the names the call goes through, such as `bouncer.authorize`'
+              : 'name the middleware as `node ace list:routes` shows it, such as `auth` or `globalThrottle`, or its specifier in start/kernel.ts',
+          ...(location && { location }),
+        })),
+    )
 
-    return exception
-      ? this.#exceptions.responses(exception, status)
-      : [{ code: status, bodies: this.#exceptions.generic }]
+    return [...this.#problems, ...unmatched]
   }
 
   /**
@@ -147,6 +138,8 @@ export class ConfiguredErrors {
       invoked
         .filter(call => callMatches(call, entry.key))
         .flatMap(call => {
+          this.#matched.add(`throwers:${entry.key}`)
+
           const source: ResponseSource = {
             kind: 'thrower',
             call: entry.key,
@@ -154,27 +147,29 @@ export class ConfiguredErrors {
             location: this.#location(call),
           }
 
-          return this.#responses(entry).map(thrown => ({ ...thrown, source }))
+          return entry.responses.map(thrown => ({ ...thrown, source }))
         }),
     )
   }
 
   /**
    * What the middleware an `errors.middleware` key names throw, for a route whose middleware go by
-   * `names`: their names, their kernel specifiers, and the keys of the modules that export them.
+   * `names`: their names, as `node ace list:routes` shows them, and their kernel specifiers.
    */
   middlewareResponses(names: Set<string>) {
     return this.#entriesOf('middleware')
       .filter(({ key }) => names.has(key))
-      .flatMap(entry =>
-        this.#responses(entry).flatMap(({ code, bodies }) =>
+      .flatMap(entry => {
+        this.#matched.add(`middleware:${entry.key}`)
+
+        return entry.responses.flatMap(({ code, bodies }) =>
           (bodies.length ? bodies : [undefined]).map(body => ({
             code,
             body,
             middleware: entry.key,
             location: entry.location,
           })),
-        ),
-      )
+        )
+      })
   }
 }

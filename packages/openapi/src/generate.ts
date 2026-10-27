@@ -4,7 +4,6 @@ import ts from 'typescript'
 import type { ApplicationService } from '@adonisjs/core/types'
 import type { Router } from '@adonisjs/core/http'
 import { collectRoutes } from './collect_routes.ts'
-import { middlewareLabels } from './middleware_labels.ts'
 import type { OperationDocs } from './operation_docs.ts'
 import { applicable, underivedResponse } from './response_tag.ts'
 import { RouteTypes } from './route_types.ts'
@@ -368,8 +367,7 @@ export async function generateDocument(
 ): Promise<GeneratedDocument> {
   const diagnostics: Diagnostic[] = []
   const appRoot = fileURLToPath(app.appRoot)
-  const labels = await middlewareLabels(app, Object.keys(config.errors.middleware ?? {}))
-  const routes = await collectRoutes(appRoot, router, config, diagnostics, labels)
+  const routes = await collectRoutes(appRoot, router, config, diagnostics)
   const types = new RouteTypes(appRoot, routes, config.errors, app.configPath('openapi.ts'))
   const vine = await validatorSchemas(app, routes, diagnostics)
 

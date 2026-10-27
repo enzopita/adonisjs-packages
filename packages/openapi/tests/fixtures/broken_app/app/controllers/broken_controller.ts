@@ -1,6 +1,8 @@
 import User from '#models/user'
 import type { HttpContext } from '@adonisjs/core/http'
 
+const ledger = { reject() {} }
+
 /**
  * @tags Broken
  */
@@ -57,5 +59,10 @@ export default class BrokenController {
   async unread({ request }: HttpContext) {
     const user = await User.verifyCredentials(request.input('email'), request.input('password'))
     return { id: user.id }
+  }
+
+  async ledger() {
+    ledger.reject()
+    return { ok: true }
   }
 }

@@ -82,8 +82,9 @@ export interface ErrorsConfig {
    */
   throwers?: Record<string, ExceptionClass>
   /**
-   * The exception a middleware throws inside a package, by its name in `router.named()`, its
-   * kernel specifier, or the module that exports it, such as `#start/limiter`.
+   * The exception a middleware throws inside a package, by its name as `node ace list:routes`
+   * shows it, such as `auth` or the `globalThrottle` of `limiter.define('global')`, or by its
+   * kernel specifier.
    */
   middleware?: Record<string, ExceptionClass>
 }
@@ -186,8 +187,9 @@ export type ResponseSource = (
  * - `OA-T006`: an exception with no status code.
  * - `OA-T007`: a `@requestBody` or `@response` type that does not resolve.
  * - `OA-T008`: a tag the generator does not read.
- * - `OA-E001`: an `errors` entry whose exception has no status code.
+ * - `OA-E001`: an `errors` entry whose exception status cannot be read from its source.
  * - `OA-E002`: a package exception that renders its own body, which its declaration does not carry.
+ * - `OA-E003`: an `errors.throwers` or `errors.middleware` key that matches nothing in the documented routes.
  * - `OA-J001`: a type with no JSON Schema, emitted as `{}`.
  * - `OA-J002`: a Lucid model, emitted as `{}`.
  */
@@ -205,6 +207,7 @@ export type DiagnosticCode =
   | 'OA-T008'
   | 'OA-E001'
   | 'OA-E002'
+  | 'OA-E003'
   | 'OA-J001'
   | 'OA-J002'
 

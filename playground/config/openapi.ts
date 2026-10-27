@@ -21,7 +21,7 @@ export default defineConfig({
       'findOrFail': lucidErrors.E_ROW_NOT_FOUND,
     },
     middleware: {
-      '#start/limiter': limiterErrors.E_TOO_MANY_REQUESTS,
+      globalThrottle: limiterErrors.E_TOO_MANY_REQUESTS,
     },
   },
 })

@@ -62,14 +62,13 @@ export async function collectRoutes(
   router: Router,
   config: OpenApiConfig,
   diagnostics: Diagnostic[],
-  labels: Map<unknown, string>,
 ): Promise<RouteOperation[]> {
   const live = router.toJSON()
   const middlewareByRoute = new Map<string, string[]>()
 
   for (const route of Object.values(live).flat()) {
-    const names = [...route.middleware.all()].flatMap(
-      entry => labels.get(entry) ?? ('name' in entry && entry.name ? [entry.name] : []),
+    const names = [...route.middleware.all()].flatMap(entry =>
+      'name' in entry && entry.name ? [entry.name] : [],
     )
 
     middlewareByRoute.set(`${route.domain}:${route.pattern}:${route.methods.join(',')}`, names)

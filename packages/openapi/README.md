@@ -84,7 +84,7 @@ export default defineConfig({
       'bouncer.authorize': bouncerErrors.E_AUTHORIZATION_FAILURE,
       'findOrFail': lucidErrors.E_ROW_NOT_FOUND,
     },
-    middleware: { '#start/limiter': limiterErrors.E_TOO_MANY_REQUESTS },
+    middleware: { globalThrottle: limiterErrors.E_TOO_MANY_REQUESTS },
   },
 })
 ```
@@ -93,9 +93,15 @@ export default defineConfig({
 - `info` is the OpenAPI Info Object: `title` and `version`, and optionally `summary`, `description`, `termsOfService`, `contact` and `license`.
 - `tags` is copied to the document's top-level `tags`. Use it to describe the tags operations use and to set their order.
 - `middlewareSecurity` maps a named middleware, such as `middleware.auth()`, to a key of `securitySchemes`. Routes behind it get the scheme in `security` and a `401` response. A route behind several mapped middleware, such as `middleware.auth()` and `middleware.tenant()`, requires all their schemes together: they share one Security Requirement Object.
-- `errors.throwers` names the exception a call throws inside a package, which the generator does not read. A key such as `findOrFail` matches any call of that method. A key such as `bouncer.authorize` matches a call on `bouncer`, also through `bouncer.with(PostPolicy).authorize()`. Calls are matched in the action and in the functions of the app it calls. The response is the one of the class, see [Error bodies](#error-bodies).
-- `errors.middleware` names the exception a middleware throws inside a package, such as the `throttle` that `limiter.define()` returns. The key is a named middleware, such as `auth`, its specifier in `start/kernel.ts`, or the module that exports it, such as `#start/limiter`.
-- `errors.body` is the body of an error the exception handler renders without a branch for its class, as a type expression such as `"import('#types/api').ApiError"`. Without it, that body is read from the exception handler.
+- `errors.throwers` names the exception a call throws inside a package, which the generator does not read. Calls are matched in the action and in the functions of the app it calls. The response is the one of the class, see [Error bodies](#error-bodies). A key is matched against the last names of the call. A call in the middle of the chain drops its method name and keeps its receiver:
+  - `findOrFail` matches any call of a method named `findOrFail`.
+  - `bouncer.authorize` matches `bouncer.authorize()`, `ctx.bouncer.authorize()` and `bouncer.with(PostPolicy).authorize()`, which reads as `bouncer.authorize`.
+  - `this.getBouncer().authorize()` reads as `this.authorize`, and `bouncerFor(user).authorize()` as `bouncerFor.authorize`, so `bouncer.authorize` matches neither.
+  - `policy.authorize` also matches `policy.for(user).authorize()`, since the matching does not check the type of the receiver.
+- `errors.middleware` names the exception a middleware throws inside a package. The key is the middleware's name as `node ace list:routes` shows it: a named middleware, such as `auth`, or the name of a function middleware, such as the `globalThrottle` that `limiter.define('global', ...)` returns. It can also be a specifier in `start/kernel.ts`. The generator matches names and loads no module to do it.
+- A `throwers` or `middleware` key that matches nothing in the documented routes, such as a misspelled `bouncer.authorise`, gets the `OA-E003` warning.
+- An entry's status is read from the source of its class, which the generator never runs: a numeric `status` field, `static status`, the `status` its constructor sets, or the one of a class it extends. A package class is read from its JavaScript, since its declaration file only says `status: number`. An entry whose status cannot be read gets the `OA-E001` warning and is ignored.
+- `errors.body` is the body of an error the exception handler renders without a branch for its class, as a type expression such as `"import('#types/api').ApiError"`. Without it, that body is read from the exception handler. It replaces `errorResponse`, which `defineConfig()` now rejects with an error.
 
 ## Serve a docs page
 
@@ -272,10 +278,10 @@ export default class UsersController {
 - `@throws {SmsRejectedException} reason` adds the response of an exception class, with its status and its body. See [Exception responses](#exception-responses). A class in scope in the controller file is used as is. Any other is found by name among the classes extending `Exception` in the app's `app/**/exceptions/` folders, so it needs no import. A name that two classes share, or that none has, fails generation with `OA-T002`. One tag names one class.
 - `@throws {import('#exceptions/user_disabled_exception').default}` names a class by its module, such as one whose name another class shares. It works for any export: `import('#exceptions/errors').E_LOCKED`.
 - `@response {404} User not found` describes a status the generator already documents, such as the `404` of `findOrFail()`. It never adds a body. When nothing documents that status, generation fails with `OA-T003`.
-- `@response {502} {UpstreamError} reason` declares a status and its body when nothing can derive them. The type is a name in scope in the controller file, or `{import('#types/api').UpstreamError}`.
-- `@throws {404}` fails generation with `OA-T001`: use `@response {404}` to describe a status, or `@throws {Class}`.
+- `@response {502} {UpstreamError} reason` declares a status and its body when nothing can derive them. The type is a name in scope in the controller file, or `{import('#types/api').UpstreamError}`. A type that does not resolve fails generation with `OA-T007`, and so does an inline object type such as `{{ provider: string }}`: declare it as a type and name it.
+- `@throws {404}` fails generation with `OA-T001`: use `@response {404}` to describe a status, or `@throws {Class}`. So does a tag without braces, such as `@throws EmailTakenException` or `@throws 404 Not found`.
 - The reason of a tag replaces the standard status text. When several tags document one status code, their reasons are joined with `; `.
-- A tag the generator does not read, such as a misspelled `@reponse`, gets the `OA-T008` warning.
+- A tag the generator does not read, such as a misspelled `@reponse`, gets the `OA-T008` warning. Standard tags for the readers of the code are ignored without one: `@param`, `@returns`, `@return`, `@see`, `@example`, `@since`, `@internal`, `@todo`, `@override`, `@inheritDoc`, `@author`, `@version`, `@alpha`, `@beta`, `@experimental`, `@public`, `@private` and `@protected`. `@summary`, `@description` and `@exception` get the warning, with where their content goes instead.
 - `@requestBody {TypeName}` sets the request body schema from a type in scope in the controller file, or from `{import('#types/webhooks').MailEvent}`. Use it when the handler reads the body without a validator, such as a webhook payload. It replaces the body the validator would document.
 
 ## Exception responses
@@ -321,7 +327,7 @@ export default class EmailTakenException extends Exception {
 
 When several exceptions share a status code, or an exception uses `422` on a route that validates its input, the body schema is a `oneOf` of each distinct body and `ValidationError`.
 
-A class from a package, such as `E_ROW_NOT_FOUND` from `@adonisjs/lucid`, is thrown inside the package, which the generator does not read. Name the call that throws it in `errors.throwers`, and its status is the one the class has at runtime.
+A class from a package, such as `E_ROW_NOT_FOUND` from `@adonisjs/lucid`, is thrown inside the package, which the generator does not read. Name the call that throws it in `errors.throwers`, and its status is read from the package's JavaScript.
 
 ## Error bodies
 
@@ -348,12 +354,12 @@ export default class HttpExceptionHandler extends ExceptionHandler {
 }
 ```
 
-1. An `if (error instanceof X)` branch of `handle()` gives the body of the class `X` and of the classes extending it. Only a condition that is the `instanceof` alone makes a branch.
-2. Else an exception with a `handle()` of its own sends its body, see [Exception responses](#exception-responses). A package exception that renders its own body, such as `E_UNAUTHORIZED_ACCESS`, is documented without one and gets the `OA-E002` warning: render it in a branch of `handle()`.
+1. An `if (error instanceof X)` branch of `handle()` gives the body of the class `X` and of the classes extending it. A condition of `instanceof` checks joined by `||`, such as `error instanceof A || error instanceof B`, makes a branch for each class. A condition that checks anything else, such as a `code`, makes no branch. A branch that sends nothing, such as one that only sets a header before `super.handle()`, does not count: the next step gives the body.
+2. Else an exception with a `handle()` of its own sends its body, see [Exception responses](#exception-responses). A package exception that renders its own body, such as `E_INVALID_CREDENTIALS`, is documented without one and gets the `OA-E002` warning: render it in a branch of `handle()`.
 3. Else an `instanceof` branch of `renderErrorAsJSON()` gives the body.
 4. Else the exception gets what `handle()` and `renderErrorAsJSON()` send outside their branches with the status of the error, or `errors.body` when the config sets it. It becomes the `Error` schema in `components.schemas`. A handler that overrides neither sends the framework's `{ message: string }`.
 
-The `401` of a secured route gets the `{ errors: [{ message }] }` that `E_UNAUTHORIZED_ACCESS` from `@adonisjs/auth` renders for a client that accepts JSON.
+The `401` of a secured route is the response of `E_UNAUTHORIZED_ACCESS` from `@adonisjs/auth`, resolved in the same order: a branch of `handle()` for it gives the body. Without one, the body is the `{ errors: [{ message }] }` its own `handle()` sends a client that accepts JSON, which the generator knows although the package does not declare it.
 
 ## Middleware responses
 

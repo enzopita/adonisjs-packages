@@ -5,6 +5,8 @@ const ledger = { reject() {} }
 
 export const computedExample = { at: Date.now() }
 export const okExample = { ok: true }
+// eslint-disable-next-line prefer-const
+export let mutableExample = { ok: true }
 
 /**
  * @tags Broken
@@ -55,6 +57,7 @@ export default class BrokenController {
   /**
    * @example {200} missingExample
    * @example {200} computedExample
+   * @example {200} mutableExample
    * @example {404} okExample
    * @example
    * await fetch('/examples')

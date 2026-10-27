@@ -218,10 +218,6 @@ export class TypeToSchema {
     return schema
   }
 
-  /**
-   * The keywords the doc comment of a property gives. A tag value that is not JSON, such as
-   * `@example jane@example.com`, is kept as a string.
-   */
   #documentation(property: ts.Symbol): JsonSchema {
     const schema: JsonSchema = {}
     const description = ts.displayPartsToString(property.getDocumentationComment(this.#checker))

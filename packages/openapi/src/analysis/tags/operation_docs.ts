@@ -23,9 +23,6 @@ export interface OperationDocs {
    * `@response {502} {UpstreamError}` declares a status and its body.
    */
   responses: ResponseTag[]
-  /**
-   * `@example {200} userExample` gives the body of a status an example.
-   */
   examples: ExampleTag[]
   requestBody?: ts.Type
   problems: Diagnostic[]

@@ -11,16 +11,13 @@ export interface ExampleTag {
   tag: ts.JSDocTag
 }
 
-/**
- * The JSON an initializer writes out, which the generator reads without running the app.
- */
-function literal(node: ts.Expression): Json | undefined {
+function staticJson(node: ts.Expression): Json | undefined {
   if (
     ts.isAsExpression(node) ||
     ts.isSatisfiesExpression(node) ||
     ts.isParenthesizedExpression(node)
   )
-    return literal(node.expression)
+    return staticJson(node.expression)
 
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text
 
@@ -40,7 +37,7 @@ function literal(node: ts.Expression): Json | undefined {
   if (node.kind === ts.SyntaxKind.NullKeyword) return null
 
   if (ts.isArrayLiteralExpression(node)) {
-    const items = node.elements.map(literal)
+    const items = node.elements.map(staticJson)
 
     return items.every(item => item !== undefined) ? items : undefined
   }
@@ -54,7 +51,7 @@ function literal(node: ts.Expression): Json | undefined {
 
     const key = property.name
     const name = ts.isIdentifier(key) || ts.isStringLiteral(key) ? key.text : undefined
-    const value = literal(property.initializer)
+    const value = staticJson(property.initializer)
 
     if (name === undefined || value === undefined) return undefined
 
@@ -112,8 +109,12 @@ export function exampleTag(
   const declaration = aliased(checker, checker.getExportSymbolOfSymbol(symbol)).valueDeclaration
 
   const value =
-    declaration && ts.isVariableDeclaration(declaration) && declaration.initializer
-      ? literal(declaration.initializer)
+    declaration &&
+    ts.isVariableDeclaration(declaration) &&
+    declaration.initializer &&
+    ts.isVariableDeclarationList(declaration.parent) &&
+    declaration.parent.flags & ts.NodeFlags.Const
+      ? staticJson(declaration.initializer)
       : undefined
 
   if (value === undefined) {

@@ -135,6 +135,10 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
     )
     assert.include(
       output,
+      'OA-T009 broken.examples: @example {200} mutableExample: mutableExample is not a const holding JSON',
+    )
+    assert.include(
+      output,
       'OA-T009 broken.examples: @example {404}: no 404 with a body is documented for this route',
     )
     assert.notInclude(output, 'OA-T008 broken.examples')

@@ -1,8 +1,9 @@
 import { spawn } from 'node:child_process'
 import { once } from 'node:events'
-import { isAbsolute, relative } from 'node:path'
+import { isAbsolute, relative, sep } from 'node:path'
 import type { Bundler } from '@adonisjs/assembler'
 import { hooks } from '@adonisjs/core/app'
+import { isOutputMessage } from './output_message.ts'
 
 /**
  * Runs before `node ace build` compiles the app and copies the meta files, and adds the document
@@ -12,24 +13,34 @@ const generateOnBuild: (bundler: Bundler) => void | PromiseLike<void> = hooks.bu
   async bundler => {
     bundler.ui.logger.info('generating the OpenAPI document', { suffix: 'openapi:generate' })
 
-    const child = spawn(process.execPath, ['ace', 'openapi:generate'], {
+    // A warning must not fail a build: `strict` is for `openapi:check` and CI.
+    const child = spawn(process.execPath, ['ace', 'openapi:generate', '--no-strict'], {
       cwd: bundler.cwdPath,
       stdio: ['inherit', 'inherit', 'inherit', 'ipc'],
     })
 
     let output: string | undefined
 
-    child.on('message', (message: { openapiOutput?: string }) => {
-      output = message.openapiOutput ?? output
+    child.on('message', message => {
+      if (isOutputMessage(message)) output = message.path
     })
 
     const [code] = await once(child, 'close')
 
     if (code !== 0) throw new Error(`"node ace openapi:generate" exited with code ${code}`)
 
-    const pattern = output && relative(bundler.cwdPath, output)
+    if (!output) {
+      bundler.ui.logger.warning(
+        '"node ace openapi:generate" did not say where it wrote the OpenAPI document, which is not shipped',
+      )
 
-    if (!pattern || pattern.startsWith('..') || isAbsolute(pattern)) {
+      return
+    }
+
+    // `metaFiles` are glob patterns, which take `/` on Windows too.
+    const pattern = relative(bundler.cwdPath, output).split(sep).join('/')
+
+    if (pattern.startsWith('..') || isAbsolute(pattern)) {
       bundler.ui.logger.warning(`the OpenAPI document at ${output} is outside the app, not shipped`)
 
       return

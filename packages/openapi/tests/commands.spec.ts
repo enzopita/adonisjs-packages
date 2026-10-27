@@ -1,22 +1,28 @@
-import { readFile, rm, writeFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
-import { playground, run } from './support/playground.ts'
+import { copyPlayground, playground, run } from './support/playground.ts'
 
 test.group('node ace build', () => {
-  test('ships the document at output with the build', async ({ assert }) => {
-    const build = new URL('build/', playground)
+  test('ships the document at output with the build, without failing on a warning in strict', async ({
+    assert,
+  }) => {
+    const dir = await copyPlayground(async copy => {
+      const config = join(copy, 'config/openapi.ts')
+      const source = await readFile(config, 'utf8')
 
-    try {
-      await run('node', ['ace', 'build'], { cwd: playground })
+      await writeFile(config, source.replace("output: 'openapi.json',", '$&\n  strict: true,'))
+    })
 
-      assert.deepEqual(
-        JSON.parse(await readFile(new URL('openapi.json', build), 'utf8')),
-        JSON.parse(await readFile(new URL('openapi.json', playground), 'utf8')),
-      )
-    } finally {
-      await rm(build, { recursive: true, force: true })
-    }
+    assert.include(await readFile(join(dir, 'config/openapi.ts'), 'utf8'), 'strict: true')
+
+    await run('node', ['ace', 'build'], { cwd: dir })
+
+    assert.deepEqual(
+      JSON.parse(await readFile(join(dir, 'build/openapi.json'), 'utf8')),
+      JSON.parse(await readFile(join(dir, 'openapi.json'), 'utf8')),
+    )
   })
 })
 

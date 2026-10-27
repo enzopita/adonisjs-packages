@@ -71,10 +71,10 @@ export function generatePlayground() {
 }
 
 /**
- * A copy of the playground with `overlay` laid over it, so the playground stays valid. Returns the
- * copy's directory and what `openapi:generate` printed.
+ * A copy of the playground with `overlay` laid over it, so a test can change it and write in it
+ * while the playground stays as it is.
  */
-export async function generateInCopy(overlay: (dir: string) => Promise<void>) {
+export async function copyPlayground(overlay: (dir: string) => Promise<void>) {
   const source = fileURLToPath(playground)
   const dir = await mkdtemp(join(tmpdir(), 'openapi-copy-'))
 
@@ -87,6 +87,16 @@ export async function generateInCopy(overlay: (dir: string) => Promise<void>) {
   await mkdir(join(dir, 'tmp'))
   await overlay(dir)
   await run('node', ['ace', 'codegen'], { cwd: dir })
+
+  return dir
+}
+
+/**
+ * Generates the document of a copy of the playground with `overlay` laid over it. Returns the
+ * copy's directory and what `openapi:generate` printed.
+ */
+export async function generateInCopy(overlay: (dir: string) => Promise<void>) {
+  const dir = await copyPlayground(overlay)
 
   const result = await run('node', ['ace', 'openapi:generate'], { cwd: dir }).then(
     success => success,

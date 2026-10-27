@@ -133,7 +133,7 @@ Every key is optional. `defineConfig()` throws when the config sets a 0.x key, s
 | `security.schemes`    | `{}`                                 | The document's `components.securitySchemes`.                                                                                                                                         |
 | `security.middleware` | `{}`                                 | Maps a named middleware, such as `middleware.auth()`, to a key of `security.schemes`. See [Security](#security).                                                                     |
 | `errors`              | `{}`                                 | The exceptions thrown inside packages, and the error body. See [Errors config](#errors-config).                                                                                      |
-| `strict`              | `false`                              | Makes every warning an error. The `--strict` and `--no-strict` flags override it.                                                                                                    |
+| `strict`              | `false`                              | Makes every warning an error in `openapi:generate` and `openapi:check`. The `--strict` and `--no-strict` flags override it. The build hook and `--explain` ignore it.                |
 | `rules`               | `{}`                                 | `summaryMaxLength` warns about a longer summary (`OA-S003`). `summaryTrailingPeriod: true` warns about a summary without a final period, `false` about one with it (`OA-S004`).      |
 
 ### Security
@@ -518,7 +518,7 @@ export default defineConfig({
 })
 ```
 
-The hook runs `node ace openapi:generate` before `node ace build` compiles the app, and adds `output` to the files the build copies, so the document lands in `build/` at the same path. An `output` outside the app root is not copied, and the hook prints a warning.
+The hook runs `node ace openapi:generate --no-strict` before `node ace build` compiles the app, and adds `output` to the files the build copies, so the document lands in `build/` at the same path. A warning does not fail the build, even with `strict: true`: run `openapi:check --strict` in CI to fail on warnings. An error does fail it. An `output` outside the app root is not copied, and the hook prints a warning.
 
 ### Protect the page
 

@@ -2,6 +2,7 @@ import { dirname, isAbsolute, relative, resolve } from 'node:path'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { flags } from '@adonisjs/core/ace'
+import { sendOutput } from '../src/output_message.ts'
 import type { ResponseSource } from '../src/types.ts'
 import { OpenApiCommand } from './base_command.ts'
 
@@ -72,8 +73,7 @@ export default class GenerateOpenApi extends OpenApiCommand {
     await mkdir(dirname(output), { recursive: true })
     await writeFile(output, `${JSON.stringify(document, null, 2)}\n`)
 
-    // The build hook spawns this command with an IPC channel to learn which file to ship.
-    process.send?.({ openapiOutput: output })
+    sendOutput(output)
 
     const shown = relative(appRoot, output)
     const inside = !shown.startsWith('..') && !isAbsolute(shown)

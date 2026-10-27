@@ -12,7 +12,7 @@ Breaking changes:
 - A body never comes from a status code. An exception's body is what an `instanceof` branch of the exception handler renders for its class, else the exception's own, else the handler's generic body. Exceptions thrown inside packages are named in `errors.throwers` (by call, such as `bouncer.authorize` or `findOrFail`) and `errors.middleware` (by middleware name, such as `globalThrottle`). `errors.body` replaces `errorResponse`.
 - The `401` of a secured route is the response of `E_UNAUTHORIZED_ACCESS`, so an exception handler branch for it gives its body.
 - An operation without `@tags` has no tags and gets `OA-S001`, instead of a tag from its route name. A tag that `document.tags` does not declare gets `OA-S002`.
-- `output` is the only document path. `openapi:generate --output` and the `file` option of `openapiRoutes()` are removed. The build hook copies `output` into the build, and `node ace add` no longer edits `metaFiles`.
+- `output` is the only document path. `openapi:generate --output` and the `file` option of `openapiRoutes()` are removed. The build hook runs `openapi:generate --no-strict`, so a warning never fails a build, and copies `output` into the build. `node ace add` no longer edits `metaFiles`.
 - `generateDocument()` returns `{ document, diagnostics, provenance }`. Each diagnostic has `code`, `severity`, `route`, `message`, `fix` and `location`, instead of a warning string.
 - A response that only comes from a middleware or exception class described by its doc comment is a `$ref` to `components.responses`, named after the class whatever the order of the routes.
 - A VineJS `.nullable()` field is in `required` (#31).

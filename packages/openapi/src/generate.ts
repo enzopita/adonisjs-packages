@@ -3,10 +3,13 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import type { ApplicationService } from '@adonisjs/core/types'
 import type { Router } from '@adonisjs/core/http'
+import { handlerResponses } from './analysis/handler_responses.ts'
 import { property } from './analysis/symbols.ts'
-import { collectRoutes } from './collect_routes.ts'
+import { operationDocs } from './analysis/tags/operation_docs.ts'
 import { applicable } from './analysis/tags/response_tag.ts'
 import type { OperationDocs } from './analysis/tags/operation_docs.ts'
+import type { ControllerHandler } from './routes/controller_handler.ts'
+import { collectRoutes } from './routes/collect_routes.ts'
 import {
   lucidModel,
   noJsonSchema,
@@ -15,7 +18,7 @@ import {
   unknownReturnType,
   unreadableValidator,
 } from './diagnostics/route.ts'
-import { RouteTypes } from './route_types.ts'
+import { readApp, type AppTypes } from './program/app_types.ts'
 import type {
   Diagnostic,
   JsonSchema,
@@ -168,14 +171,23 @@ function render(code: string, { reasons, bodies, headers, optional }: Outcome): 
 
 function responsesFor(
   route: RouteOperation,
-  types: RouteTypes,
+  types: AppTypes,
+  controller: ControllerHandler | undefined,
   response: ts.Type | undefined,
   docs: Pick<OperationDocs, 'throws' | 'responses'>,
   secured: string[],
   diagnostics: Diagnostic[],
 ) {
   const outcomes = new Map<string, Outcome>()
-  const handler = types.handlerResponses(route)
+
+  const handler = controller
+    ? handlerResponses(
+        types.checker,
+        types.checker.getDeclaredTypeOfSymbol(controller.symbol),
+        controller.method.name.getText(),
+      )
+    : { answers: [], throws: [], invoked: [], headers: [] }
+
   // A body returned or sent without a status keeps the one `response.status(...)` set.
   const plain = handler.status ?? '200'
 
@@ -205,7 +217,10 @@ function responsesFor(
     }
   }
 
-  const returned: ResponseSource = { kind: 'return', location: types.handlerLocation(route) }
+  const returned: ResponseSource = {
+    kind: 'return',
+    location: controller && types.locate(controller.method.name),
+  }
 
   const answer = (source: ResponseSource, code: string, body?: Body, headers: string[] = []) => {
     const found = outcome(code)
@@ -252,7 +267,7 @@ function responsesFor(
 
   for (const { code = plain, body, binary, headers, node } of handler.answers) {
     const payload = body && !(body.flags & WITHOUT_BODY) ? handlerBody(body) : undefined
-    const source: ResponseSource = { kind: 'answer', location: types.location(node) }
+    const source: ResponseSource = { kind: 'answer', location: types.locate(node) }
 
     const file = binary && { mediaType: binary, schema: { type: 'string', format: 'binary' } }
 
@@ -264,14 +279,14 @@ function responsesFor(
   for (const { code = plain, body, node, exception = '' } of types.exceptions.thrownAnswers(
     handler.throws,
   ))
-    thrown({ kind: 'throw', exception, location: types.location(node) }, code, body ? [body] : [])
+    thrown({ kind: 'throw', exception, location: types.locate(node) }, code, body ? [body] : [])
 
   for (const { code, bodies, source } of types.errors.throwerResponses(handler.invoked))
     thrown(source, code, bodies)
 
   for (const { exception, reason, tag } of docs.throws) {
     const responses = types.exceptions.responses(exception)
-    const location = types.location(tag)
+    const location = types.locate(tag)
 
     if (!responses.length)
       diagnostics.push(statuslessException(route.name, exception.name, location))
@@ -281,7 +296,7 @@ function responsesFor(
   }
 
   // The validator's error shares the status code an exception documents, so the body is either.
-  const validationError = route.validator && types.validationError()
+  const validationError = route.validator && types.validationError
 
   if (validationError) {
     const found = outcome('422')
@@ -309,12 +324,12 @@ function responsesFor(
   const { apply, underived } = applicable(docs.responses, code => outcomes.has(code))
 
   for (const { code, body, reason, tag } of apply) {
-    const source: ResponseSource = { kind: 'tag', tag: '@response', location: types.location(tag) }
+    const source: ResponseSource = { kind: 'tag', tag: '@response', location: types.locate(tag) }
     thrown(source, code, body ? [body] : [], reason)
   }
 
   for (const { code, tag } of underived)
-    diagnostics.push(underivedResponse(route.name, code, types.location(tag)))
+    diagnostics.push(underivedResponse(route.name, code, types.locate(tag)))
 
   const typed = outcomes.size > 0
 
@@ -365,18 +380,28 @@ export async function generateDocument(
   const diagnostics: Diagnostic[] = []
   const appRoot = fileURLToPath(app.appRoot)
   const routes = await collectRoutes(appRoot, router, config, diagnostics)
-  const types = new RouteTypes(appRoot, routes, config.errors, app.configPath('openapi.ts'))
+  const types = readApp(appRoot, routes, config.errors, app.configPath('openapi.ts'))
   const vine = await validatorSchemas(app, routes, diagnostics)
 
   const paths: OpenApiDocument['paths'] = {}
   const provenance: GeneratedDocument['provenance'] = {}
 
   for (const route of routes) {
-    const { request, response } = types.get(route.name)
+    const { request, response } = types.routeTypes(route.name)
     const input = request && mergeSchemas(vine.get(route.name), types.schemas.convert(request))
     const fields = input && pick(input, key => !NOT_IN_BODY.has(key))
 
-    const { meta, throws, responses: tagged, requestBody, problems } = types.docs(route)
+    const controller = types.handler(route)
+
+    const {
+      meta,
+      throws,
+      responses: tagged,
+      requestBody,
+      problems,
+    } = controller
+      ? operationDocs(types.tags, controller.declaration, controller.method)
+      : { meta: {}, throws: [], responses: [], problems: [], requestBody: undefined }
 
     diagnostics.push(...problems.map((problem): Diagnostic => ({ ...problem, route: route.name })))
 
@@ -391,6 +416,7 @@ export async function generateDocument(
     const { responses, sources } = responsesFor(
       route,
       types,
+      controller,
       response,
       { throws, responses: tagged },
       secured,

@@ -1,14 +1,14 @@
 import { RoutesScanner } from '@adonisjs/assembler/routes_scanner'
 import type { RoutesListItem } from '@adonisjs/assembler/types'
 import type { Router } from '@adonisjs/core/http'
-import { closureRoute } from './diagnostics/route.ts'
+import { closureRoute } from '../diagnostics/route.ts'
 import type {
   Diagnostic,
   HttpMethod,
   OpenApiConfig,
   RouteMatcher,
   RouteOperation,
-} from './types.ts'
+} from '../types.ts'
 
 const METHODS = new Set<string>(['get', 'post', 'put', 'patch', 'delete', 'options'])
 

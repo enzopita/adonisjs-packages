@@ -77,9 +77,9 @@ export function locateFunctions(functions: Function[]) {
     session.post(
       'Runtime.evaluate',
       { expression: `globalThis[Symbol.for(${JSON.stringify(HANDLE.description)})]` },
-      (error, { result }) => {
+      (error, response) => {
         if (error) throw error
-        objectId = result.objectId
+        objectId = response.result.objectId
       },
     )
 
@@ -97,10 +97,10 @@ export function locateFunctions(functions: Function[]) {
     return properties
   }
 
-  session.connect()
   session.on('Debugger.scriptParsed', ({ params }) => scripts.set(params.scriptId, params))
 
   try {
+    session.connect()
     session.post('Debugger.enable')
 
     for (const fn of functions) {
@@ -121,6 +121,7 @@ export function locateFunctions(functions: Function[]) {
 
       if (mapped) found.set(fn, mapped)
     }
+  } catch {
   } finally {
     Reflect.deleteProperty(globalThis, HANDLE)
     session.disconnect()

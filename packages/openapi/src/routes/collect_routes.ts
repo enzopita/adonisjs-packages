@@ -3,7 +3,6 @@ import type { RoutesListItem } from '@adonisjs/assembler/types'
 import type { Router } from '@adonisjs/core/http'
 import { closureRoute } from '../diagnostics/route.ts'
 import type { Diagnostic, HttpMethod, OpenApiConfig, RouteMatcher } from '../types.ts'
-import { locateFunctions } from './function_location.ts'
 import type { RouteOperation } from './route_operation.ts'
 
 const METHODS = new Set<string>(['get', 'post', 'put', 'patch', 'delete', 'options'])
@@ -64,10 +63,6 @@ export async function collectRoutes(
 
   const routes = Object.values(live).flat()
 
-  const locations = locateFunctions(
-    routes.flatMap(route => [...route.middleware.all()].filter(entry => entry instanceof Function)),
-  )
-
   const middlewareByRoute = new Map<
     string,
     Pick<RouteOperation, 'middleware' | 'inlineMiddleware'>
@@ -85,7 +80,7 @@ export async function collectRoutes(
               {
                 name: entry.name || 'closure',
                 source: entry.toString(),
-                location: locations.get(entry),
+                fn: entry,
               },
             ]
           : [],

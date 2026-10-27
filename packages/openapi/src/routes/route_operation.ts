@@ -1,5 +1,4 @@
 import type { HttpMethod } from '../types.ts'
-import type { FunctionLocation } from './function_location.ts'
 
 /**
  * One named route as the generator sees it: where it lives, and the TypeScript
@@ -15,7 +14,7 @@ export interface RouteOperation {
   path: string
   pathParams: string[]
   middleware: string[]
-  inlineMiddleware: { name: string; source: string; location?: FunctionLocation }[]
+  inlineMiddleware: { name: string; source: string; fn: Function }[]
   requestType?: string
   responseType?: string
   imports: string[]

@@ -1,6 +1,6 @@
 import ts from 'typescript'
 import { isAppSource } from '../analysis/symbols.ts'
-import type { FunctionLocation } from './function_location.ts'
+import { type FunctionLocation, locateFunctions } from './function_location.ts'
 import type { RouteOperation } from './route_operation.ts'
 
 type FunctionNode = ts.ArrowFunction | ts.FunctionExpression | ts.FunctionDeclaration
@@ -163,7 +163,7 @@ function declaredAt(program: ts.Program, { file, line, column }: FunctionLocatio
   return found
 }
 
-export function inlineMiddleware(program: ts.Program) {
+export function inlineMiddleware(program: ts.Program, middleware: InlineMiddleware[]) {
   let index: Map<string, FunctionNode[]> | undefined
   const erased = new Map<FunctionNode, string | undefined>()
 
@@ -209,10 +209,24 @@ export function inlineMiddleware(program: ts.Program) {
     return only?.body ? { kind: 'found', body: only.body } : { kind: 'missing' }
   }
 
-  return ({ source, location }: InlineMiddleware): InlineMatch => {
+  let locations: Map<Function, FunctionLocation> | undefined
+
+  const locationOf = (fn: Function) => {
+    locations ??= locateFunctions(
+      middleware.flatMap(({ source, fn }) => (bySource(source).kind === 'missing' ? [fn] : [])),
+    )
+
+    return locations.get(fn)
+  }
+
+  return ({ source, fn }: InlineMiddleware): InlineMatch => {
     const match = bySource(source)
 
-    if (match.kind !== 'missing' || !location) return match
+    if (match.kind !== 'missing') return match
+
+    const location = locationOf(fn)
+
+    if (!location) return match
 
     const body = declaredAt(program, location)
 

@@ -11,3 +11,13 @@ export const searchProbeValidator = vine.create({
 export const echoProbeValidator = vine.create({
   message: vine.string(),
 })
+
+/**
+ * `request.validateUsing()` validates the body merged with the query string, so `query` is a
+ * field like any other: `?query[page]=2` or `{ "query": { "page": 2 } }`, never `?page=2`.
+ */
+export const pagedProbeValidator = vine.create({
+  query: vine.object({
+    page: vine.number(),
+  }),
+})

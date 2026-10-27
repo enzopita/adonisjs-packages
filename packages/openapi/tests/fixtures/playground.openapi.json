@@ -2134,6 +2134,82 @@
           }
         }
       }
+    },
+    "/api/v1/probe/paged": {
+      "post": {
+        "operationId": "probe.probe.paged",
+        "tags": [
+          "Probe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "query": {
+                      "type": "object",
+                      "properties": {
+                        "page": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "page"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "query"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "object",
+                    "properties": {
+                      "page": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "page"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "query"
+                ]
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

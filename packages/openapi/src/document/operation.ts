@@ -33,8 +33,11 @@ export function operationFor(
   const validated = readsQueryOnly ? undefined : fields
   const body = requestBody ? app.schemas.convert(requestBody) : validated
 
-  const query = readsQueryOnly ? fields : input?.properties?.query
-  const parameters = parametersFor(route, query, input?.properties?.params)
+  const parameters = parametersFor(
+    route,
+    readsQueryOnly ? fields : undefined,
+    input?.properties?.params,
+  )
 
   const operation: OpenApiOperation = {
     operationId: route.methods.length > 1 ? `${route.operationId}.${method}` : route.operationId,

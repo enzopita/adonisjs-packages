@@ -2,7 +2,8 @@ import type { ApplicationService } from '@adonisjs/core/types'
 import { unreadableValidator } from '../diagnostics/route.ts'
 import type { Diagnostic, JsonSchema, RouteOperation } from '../types.ts'
 
-const NOT_IN_BODY = new Set(['query', 'params', 'headers', 'cookies'])
+// The keys `request.validateUsing()` adds next to the body and the query string.
+const NOT_IN_BODY = new Set(['params', 'headers', 'cookies'])
 
 /**
  * Vine emits draft-7 object schemas, and every keyword JsonSchema names means the same there.
@@ -33,7 +34,7 @@ export function mergeSchemas(vine: JsonSchema | undefined, typed: JsonSchema): J
 }
 
 /**
- * The part of the input that is the request body: what `query`, `params`, `headers` and `cookies` hold is not.
+ * The part of the input that is the request body: what `params`, `headers` and `cookies` hold is not.
  */
 export function bodyFields(input: JsonSchema): JsonSchema | undefined {
   const keep = (key: string) => !NOT_IN_BODY.has(key)

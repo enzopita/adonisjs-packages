@@ -86,6 +86,7 @@ router
         router.get('search', [controllers.Probe, 'search'])
         router.get('items/:id?', [controllers.Probe, 'item'])
         router.route('echo', ['GET', 'POST'], [controllers.Probe, 'echo'])
+        router.post('paged', [controllers.Probe, 'paged'])
         router.route('head', ['HEAD'], [controllers.Probe, 'head'])
         router.get('closure', () => ({ ok: true })).as('closure')
       })

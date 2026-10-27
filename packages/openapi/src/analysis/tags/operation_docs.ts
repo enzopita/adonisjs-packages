@@ -39,15 +39,15 @@ interface Collected {
 
 type TagReader = (context: TagContext, tag: ts.JSDocTag, collected: Collected) => void
 
-const TAG_READERS = new Map<string, TagReader>([
-  [
-    'throws',
-    (context, tag, { throws }) => {
-      const thrown = ts.isJSDocThrowsTag(tag) ? throwsTag(context, tag) : undefined
+const readThrows: TagReader = (context, tag, { throws }) => {
+  const thrown = ts.isJSDocThrowsTag(tag) ? throwsTag(context, tag) : undefined
 
-      if (thrown) throws.push(thrown)
-    },
-  ],
+  if (thrown) throws.push(thrown)
+}
+
+const TAG_READERS = new Map<string, TagReader>([
+  ['throws', readThrows],
+  ['exception', readThrows],
   [
     'response',
     (context, tag, { responses }) => {

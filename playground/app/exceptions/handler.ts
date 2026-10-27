@@ -1,6 +1,9 @@
 import app from '@adonisjs/core/services/app'
-import { Exception } from '@adonisjs/core/exceptions'
+import { errors as bouncerErrors } from '@adonisjs/bouncer'
+import { errors as limiterErrors } from '@adonisjs/limiter'
+import type { Exception } from '@adonisjs/core/exceptions'
 import { type HttpContext, ExceptionHandler } from '@adonisjs/core/http'
+import PlanLimitException from '#exceptions/plan_limit_exception'
 
 export default class HttpExceptionHandler extends ExceptionHandler {
   /**
@@ -14,8 +17,28 @@ export default class HttpExceptionHandler extends ExceptionHandler {
    * response to the client
    */
   async handle(error: unknown, ctx: HttpContext) {
-    if (error instanceof Exception && error.code === 'E_FORBIDDEN') {
-      return ctx.response.forbidden({ code: 'E_FORBIDDEN' as const, message: error.message })
+    // A policy's `deny(message, status)` sets the status on `error.response`, as bouncer's own handle() reads it.
+    if (error instanceof bouncerErrors.E_AUTHORIZATION_FAILURE) {
+      return ctx.response.status(error.response.status || error.status).send({
+        code: 'E_AUTHORIZATION_FAILURE' as const,
+        message: error.getResponseMessage(ctx),
+      })
+    }
+
+    if (error instanceof limiterErrors.E_TOO_MANY_REQUESTS) {
+      return ctx.response.status(error.status).send({
+        code: 'E_TOO_MANY_REQUESTS' as const,
+        message: error.getResponseMessage(ctx),
+        retryAfter: error.response.availableIn,
+      })
+    }
+
+    if (error instanceof PlanLimitException) {
+      return ctx.response.status(error.status).send({
+        code: 'E_PLAN_LIMIT' as const,
+        message: error.message,
+        upgradeUrl: '/billing',
+      })
     }
 
     return super.handle(error, ctx)

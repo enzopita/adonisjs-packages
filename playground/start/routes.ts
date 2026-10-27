@@ -81,6 +81,19 @@ router
         router.get('maintenance', [controllers.Probe, 'maintenance'])
         router.get('upstream', [controllers.Probe, 'upstream'])
         router.get('throttled', [controllers.Probe, 'text']).as('throttled').use(throttle)
+        router
+          .get('secret', [controllers.Probe, 'text'])
+          .as('secret')
+          .use(async ({ request, response }, next) => {
+            if (request.header('x-probe-secret') !== 'open sesame') {
+              return response.unauthorized({
+                code: 'E_WRONG_SECRET' as const,
+                message: 'Send the probe secret',
+              })
+            }
+
+            return next()
+          })
         router.get('model', [controllers.Probe, 'model'])
         router.get('collections', [controllers.Probe, 'collections'])
         router.get('search', [controllers.Probe, 'search'])

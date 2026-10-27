@@ -3,13 +3,14 @@ import type { Answer } from '../analysis/answers.ts'
 import type { ConfiguredErrors } from '../analysis/errors/configured_errors.ts'
 import type { ExceptionResponses } from '../analysis/exceptions/exception_responses.ts'
 import { handlerResponses } from '../analysis/handler_responses.ts'
+import { methodBodies } from '../analysis/response_calls.ts'
 import type { RouteOperation, SourceLocation } from '../types.ts'
 import type { Kernel } from './kernel.ts'
 
 /**
  * What the route's middleware answer with when they stop the request, such as the `400` of
- * `response.badRequest(...)` in a tenant middleware, and what the package middleware an
- * `errors.middleware` key names throw. Only answers with a status are kept.
+ * `response.badRequest(...)` in a tenant middleware or in a function passed to `.use()`, and what
+ * the package middleware an `errors.middleware` key names throw. Only answers with a status are kept.
  */
 export class MiddlewareResponses {
   #checker: ts.TypeChecker
@@ -18,6 +19,7 @@ export class MiddlewareResponses {
   #exceptions: ExceptionResponses
   #errors: ConfiguredErrors
   #locate: (node: ts.Node) => SourceLocation
+  #findInline: (source: string) => ts.FunctionLikeDeclaration | undefined
   #answers = new Map<string, Answer[]>()
 
   constructor(
@@ -27,6 +29,7 @@ export class MiddlewareResponses {
     exceptions: ExceptionResponses,
     errors: ConfiguredErrors,
     locate: (node: ts.Node) => SourceLocation,
+    findInline: (source: string) => ts.FunctionLikeDeclaration | undefined,
   ) {
     this.#checker = checker
     this.#kernel = kernel
@@ -34,6 +37,13 @@ export class MiddlewareResponses {
     this.#exceptions = exceptions
     this.#errors = errors
     this.#locate = locate
+    this.#findInline = findInline
+  }
+
+  #read(bodies: ts.Node[]) {
+    const read = handlerResponses(this.#checker, bodies)
+
+    return [...read.answers, ...this.#exceptions.thrownAnswers(read.throws)]
   }
 
   #answersOf(specifier: string) {
@@ -41,8 +51,7 @@ export class MiddlewareResponses {
 
     if (!found) {
       const instance = this.#instanceOf(specifier)
-      const read = instance && handlerResponses(this.#checker, instance, 'handle')
-      found = read ? [...read.answers, ...this.#exceptions.thrownAnswers(read.throws)] : []
+      found = instance ? this.#read(methodBodies(this.#checker, instance, ['handle'])) : []
       this.#answers.set(specifier, found)
     }
 
@@ -55,11 +64,21 @@ export class MiddlewareResponses {
       ...route.middleware.flatMap(name => this.#kernel.named.get(name) ?? []),
     ]
 
-    const read = specifiers.flatMap(specifier =>
-      this.#answersOf(specifier).flatMap(({ code, body, node }) =>
-        code === undefined
-          ? []
-          : [{ code, body, middleware: specifier, location: this.#locate(node) }],
+    const inline = route.inlineMiddleware.flatMap(({ name, source }) => {
+      const body = this.#findInline(source)?.body
+
+      return body ? [{ middleware: name, answers: this.#read([body]) }] : []
+    })
+
+    const read = [
+      ...specifiers.map(specifier => ({
+        middleware: specifier,
+        answers: this.#answersOf(specifier),
+      })),
+      ...inline,
+    ].flatMap(({ middleware, answers }) =>
+      answers.flatMap(({ code, body, node }) =>
+        code === undefined ? [] : [{ code, body, middleware, location: this.#locate(node) }],
       ),
     )
 

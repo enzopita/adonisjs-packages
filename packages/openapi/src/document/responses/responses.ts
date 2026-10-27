@@ -1,5 +1,6 @@
 import type ts from 'typescript'
 import { handlerResponses } from '../../analysis/handler_responses.ts'
+import { methodBodies } from '../../analysis/response_calls.ts'
 import type { OperationDocs } from '../../analysis/tags/operation_docs.ts'
 import { unknownReturnType } from '../../diagnostics/route.ts'
 import type { AppTypes } from '../../program/app_types.ts'
@@ -21,8 +22,9 @@ function contextFor(
   const handler = controller
     ? handlerResponses(
         app.checker,
-        app.checker.getDeclaredTypeOfSymbol(controller.symbol),
-        controller.method.name.getText(),
+        methodBodies(app.checker, app.checker.getDeclaredTypeOfSymbol(controller.symbol), [
+          controller.method.name.getText(),
+        ]),
       )
     : { answers: [], throws: [], invoked: [], headers: [] }
 

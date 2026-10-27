@@ -147,6 +147,10 @@ export interface RouteOperation {
   path: string
   pathParams: string[]
   middleware: string[]
+  /**
+   * The functions passed to the route's `.use()`, with the source they have at runtime.
+   */
+  inlineMiddleware: { name: string; source: string }[]
   requestType?: string
   responseType?: string
   imports: string[]

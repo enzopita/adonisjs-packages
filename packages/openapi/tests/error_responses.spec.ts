@@ -58,6 +58,20 @@ test.group('openapi:generate on the playground app: exceptions, middleware and t
     assert.notProperty(document.paths['/api/v1/account/profile']!.get!.responses, '400')
   })
 
+  test('documents what a function passed to .use() answers with', ({ assert }) => {
+    assert.deepEqual(probe('secret').responses['401'], {
+      description: 'Unauthorized',
+      content: {
+        'application/json': {
+          schema: object({
+            code: { type: 'string', const: 'E_WRONG_SECRET' },
+            message: { type: 'string' },
+          }),
+        },
+      },
+    })
+  })
+
   test('documents the status and body of an exception named by @throws', ({ assert }) => {
     const unprocessable = document.paths['/api/v1/auth/signup']!.post!.responses['422']!
 

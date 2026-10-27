@@ -60,6 +60,7 @@ test.group('openapi:generate on the playground app: the document', group => {
       '/api/v1/probe/echo',
       '/api/v1/probe/paged',
       '/api/v1/probe/nullable',
+      '/api/v1/probe/secret',
     ])
     assert.include(logs, 'OA-R001 probe.closure: closure handlers have no types to read')
     assert.notInclude(logs, 'openapi.ui')

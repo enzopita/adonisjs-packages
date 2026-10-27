@@ -71,6 +71,14 @@ test.group('openapi:generate --explain', () => {
     assert.include(throttled.stdout, 'the middleware globalThrottle (config/openapi.ts:')
   })
 
+  test('names a function passed to .use() as closure', async ({ assert }) => {
+    const { stdout } = await run('node', ['ace', 'openapi:generate', '--explain=probe.secret'], {
+      cwd: playground,
+    })
+
+    assert.match(stdout, /401\n {2}the middleware closure \(start\/routes\.ts:\d+\)/)
+  })
+
   test('names the middleware that secures a route', async ({ assert }) => {
     const { stdout } = await run(
       'node',

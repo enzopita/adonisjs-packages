@@ -165,7 +165,7 @@ Routes behind a middleware that `security.middleware` maps get its scheme in `se
 
 The generator follows `throw new X()` in the app's code. It does not read package code, so `errors` names what packages throw:
 
-- `errors.throwers` names the exception a call throws inside a package. Calls are matched in the action and in the functions of the app it calls. The response is the one of the class, see [Error bodies](#error-bodies). A key is matched against the last names of the call. A call in the middle of the chain drops its method name and keeps its receiver:
+- `errors.throwers` names the exception a call throws inside a package. Calls are matched in the action, in the functions of the app it calls, and in the `handle()` of the route's middleware, which the response then names as its source. The response is the one of the class, see [Error bodies](#error-bodies). A key is matched against the last names of the call. A call in the middle of the chain drops its method name and keeps its receiver:
   - `findOrFail` matches any call of a method named `findOrFail`.
   - `bouncer.authorize` matches `bouncer.authorize()`, `ctx.bouncer.authorize()` and `bouncer.with(PostPolicy).authorize()`, which reads as `bouncer.authorize`.
   - `failures.consume` matches `failures.consume(key)`, where `failures` is the local name of the receiver, whatever its type.
@@ -203,7 +203,7 @@ export default class UsersController {
 
 The first paragraph is the `summary`. The next paragraphs and `@remarks` are the `description`.
 
-A doc tag is an `@` line of the doc comment, such as `@response {404} User not found`. The generator reads six doc tags, and each form of a doc tag has one meaning. `@response` has two forms, told apart by what follows the status code: a reason alone describes a response the generator documents, and a `{Type}` declares a response with that body.
+A doc tag is an `@` line of the doc comment, such as `@response {404} User not found`. The generator reads seven doc tags, and each form of a doc tag has one meaning. `@response` has two forms, told apart by what follows the status code: a reason alone describes a response the generator documents, and a `{Type}` declares a response with that body.
 
 | Doc tag form                      | Meaning                                                                                                                                                                          |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -212,6 +212,7 @@ A doc tag is an `@` line of the doc comment, such as `@response {404} User not f
 | `@response {502} {Type} [reason]` | Declares a status and its body that nothing can derive, such as an upstream error the handler relays.                                                                            |
 | `@throws {Class} [reason]`        | Adds the status and the body of an exception class, which the reason describes for this operation. See [Exception responses](#exception-responses).                              |
 | `@requestBody {Type}`             | The request body schema, for a handler that reads the body without a validator, such as a webhook. It replaces the body the validator would document.                            |
+| `@example {200} name`             | The example of the body of a status the operation documents. `name` is a `const` in scope whose initializer is JSON, or `import('#examples/users').card`.                        |
 | `@deprecated`                     | Marks the operation as deprecated.                                                                                                                                               |
 | `@remarks`                        | Adds a paragraph to the `description`.                                                                                                                                           |
 
@@ -222,7 +223,8 @@ Prefer what the generator derives over a doc tag. An exception the action throws
 - `@throws {404}`, `@throws {A | B}` and a tag without braces, such as `@throws EmailTakenException`, fail generation with `OA-T001`, which names the fix.
 - The reason of a doc tag replaces the description for that operation. When several doc tags document one status code, their reasons are joined with `; `.
 - An operation without `@tags` has no OpenAPI tags and gets `OA-S001`.
-- A doc tag the generator does not read, such as a misspelled `@reponse`, gets `OA-T008`. Standard doc tags for the readers of the code are ignored without one: `@param`, `@returns`, `@return`, `@see`, `@example`, `@since`, `@internal`, `@todo`, `@override`, `@inheritDoc`, `@author`, `@version`, `@alpha`, `@beta`, `@experimental`, `@public`, `@private` and `@protected`. `@summary`, `@description` and `@exception` get the warning, with where their content goes instead.
+- An `@example {N}` whose value is not in scope, is not a `const` holding JSON, or names a status without a body gets `OA-T009`.
+- A doc tag the generator does not read, such as a misspelled `@reponse`, gets `OA-T008`. Standard doc tags for the readers of the code are ignored without one: `@param`, `@returns`, `@return`, `@see`, `@example` without a status, `@since`, `@internal`, `@todo`, `@override`, `@inheritDoc`, `@author`, `@version`, `@alpha`, `@beta`, `@experimental`, `@public`, `@private` and `@protected`. `@summary`, `@description` and `@exception` get the warning, with where their content goes instead.
 
 ## Describe a response once
 
@@ -301,6 +303,8 @@ export default class EmailTakenException extends Exception {
 
 When several exceptions share a status code, or an exception uses `422` on a route that validates its input, the body schema is a `oneOf` of each distinct body and `ValidationError`.
 
+The document also gets an `ErrorCode` schema, an enum of every literal `code` (`as const`, or a literal type) an error body carries, so a client can list the codes. A name `ErrorCode` your own types already use is left alone.
+
 A class from a package, such as `E_ROW_NOT_FOUND` from `@adonisjs/lucid`, is thrown inside the package, which the generator does not read. Name the call that throws it in `errors.throwers`, and its status is read from the package's JavaScript.
 
 ## Error bodies
@@ -328,7 +332,7 @@ export default class HttpExceptionHandler extends ExceptionHandler {
 }
 ```
 
-1. An `if (error instanceof X)` branch of `handle()` gives the body of the class `X` and of the classes extending it. A condition of `instanceof` checks joined by `||`, such as `error instanceof A || error instanceof B`, makes a branch for each class. A condition that checks anything else, such as a `code`, makes no branch. A branch that sends nothing, such as one that only sets a header before `super.handle()`, does not count: the next step gives the body.
+1. An `if (error instanceof X)` branch of `handle()` gives the body of the class `X` and of the classes extending it. A condition of `instanceof` checks joined by `||`, such as `error instanceof A || error instanceof B`, makes a branch for each class. A condition that joins an `instanceof` check to another check with `&&`, such as `error instanceof A && error.code === 'X'`, makes a conditional branch: its body joins the bodies of `A`, and `A` still goes on to the next step. Any other condition, such as a check of a `code` alone, makes no branch. A branch that sends nothing, such as one that only sets a header before `super.handle()`, does not count: the next step gives the body.
 2. Else an exception with a `handle()` of its own sends its body, see [Exception responses](#exception-responses). A package exception that renders its own body, such as `E_INVALID_CREDENTIALS`, is documented without one and gets the `OA-E002` warning: render it in a branch of `handle()`.
 3. Else an `instanceof` branch of `renderErrorAsJSON()` gives the body.
 4. Else the exception gets what `handle()` and `renderErrorAsJSON()` send outside their branches with the status of the error, or `errors.body` when the config sets it. It becomes the `Error` schema in `components.schemas`. A handler that overrides neither sends the framework's `{ message: string }`.
@@ -399,6 +403,7 @@ When `.adonisjs/client/data.d.ts` exists, every type in its `Data` namespace bec
 - A `HEAD`-only route is left out.
 - A body with a `vine.file()` field is sent as `multipart/form-data`.
 - When VineJS cannot describe a field (a file, a custom rule), the generator uses the field's TypeScript type.
+- The doc comment of a property, in a transformer's `toObject()` or a returned type, documents its schema. The text is the `description`, each `@example` adds to `examples`, `@default` is the `default` and `@deprecated` sets `deprecated: true`. A tag value that is not JSON, such as `@example Jane Doe`, is kept as a string.
 - `Date` and Luxon `DateTime` values become `{ type: 'string', format: 'date-time' }`.
 - `Map` and `Set` become an empty object and `bigint` a string, as they serialize. Symbol keys and properties typed `undefined` are left out.
 - A Lucid model returned directly becomes `{}` with `OA-J002`, because its type does not describe what `serialize()` sends. Return it through a transformer.
@@ -422,6 +427,7 @@ Codes keep their meaning across releases. An `error` fails `openapi:generate` an
 | `OA-T006` | warning                                           | A `@throws` class with no status code.                                                                                            | Give it a literal `static status`, or answer with a helper such as `response.conflict(body)` in its `handle()`.                                 |
 | `OA-T007` | error for `@response`, warning for `@requestBody` | A type that does not resolve, or an inline object type.                                                                           | Declare it as a named type in scope, or name it as `import('...').Type`.                                                                        |
 | `OA-T008` | warning                                           | A doc tag the generator does not read, such as `@reponse`.                                                                        | Use `@throws`, `@response`, `@requestBody`, `@tags`, `@deprecated` or `@remarks`.                                                               |
+| `OA-T009` | warning                                           | An `@example {N}` whose value does not resolve to a `const` holding JSON, or whose status has no body.                            | Name a `const` whose initializer is JSON, and a status whose response has a body.                                                               |
 | `OA-E001` | warning                                           | An `errors` entry whose exception status cannot be read from its source. The entry is ignored.                                    | Name a class with a numeric `status` field or `static status`.                                                                                  |
 | `OA-E002` | warning                                           | A package exception that renders its own body, which its declaration does not carry. It is documented without one.                | Render it in an `instanceof` branch of the exception handler's `handle()`.                                                                      |
 | `OA-E003` | warning                                           | An `errors.throwers` or `errors.middleware` key that matches nothing in the documented routes.                                    | Fix the key. See [Errors config](#errors-config).                                                                                               |
@@ -678,6 +684,6 @@ Known cases where the document differs from what the app sends, or where the gen
 
 - A policy that denies with a status of its own, such as `AuthorizationResponse.deny('Not found', 404)`, sends that status at runtime. The generator documents the class's `403`. Declare the other with `@response {404} {Type}`.
 - A package that throws a plain `Exception` with no exported class, such as the bodyparser's `413`, cannot be named in `errors`. Declare the response with `@response {N} {Type}`.
-- `download()` and `attachment()` with a path built at runtime, such as `app.makePath('report.pdf')`, are documented as `application/octet-stream`. The app sends the media type of the file's extension.
+- `download()` and `attachment()` with a path built at runtime, such as `app.makePath('report.pdf')`, are documented as `application/octet-stream`. The app sends the media type of the file's extension, which the generator cannot read from the source. Write the path as a literal that ends with the extension to document its media type.
 - A thrower key matches every call of its method, so a `findOrFail()` that cannot fail still documents its `404`. See [Errors config](#errors-config).
 - The paginator `metadata` fields are typed `string` by Lucid's `SimplePaginatorMetaKeys`, so they are documented as strings. The app sends numbers and `null`. Fix the type in the app's serializer.

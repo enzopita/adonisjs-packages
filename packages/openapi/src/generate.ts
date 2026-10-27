@@ -287,6 +287,10 @@ export async function generateDocument(
     warnings.push(`no JSON Schema for the type ${type}, emitted {}`)
   }
 
+  for (const model of types.schemas.models) {
+    warnings.push(`${model} is a Lucid model, emitted {}: return it through a transformer`)
+  }
+
   const document: OpenApiDocument = {
     openapi: '3.1.0',
     info: config.info,

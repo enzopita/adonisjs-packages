@@ -46,6 +46,14 @@ router
       .as('users')
 
     router.post('webhooks/mail', [controllers.MailEvents, 'store']).as('webhooks.mail')
+
+    router
+      .group(() => {
+        router.get('model', [controllers.Probe, 'model'])
+        router.get('collections', [controllers.Probe, 'collections'])
+      })
+      .prefix('probe')
+      .as('probe')
   })
   .prefix('/api/v1')
 

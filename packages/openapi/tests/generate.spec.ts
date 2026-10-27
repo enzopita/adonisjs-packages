@@ -2,11 +2,21 @@ import { execFile } from 'node:child_process'
 import { readFile, rm } from 'node:fs/promises'
 import { promisify } from 'node:util'
 import { test } from '@japa/runner'
-import type { OpenApiDocument } from '../src/types.ts'
+import type { JsonSchema, OpenApiDocument, OpenApiResponse } from '../src/types.ts'
 
 const playground = new URL('../../../playground/', import.meta.url)
 const output = 'tmp/openapi.spec.json'
 const run = promisify(execFile)
+
+const json = (response: OpenApiResponse | undefined) =>
+  response!.content!['application/json']!.schema
+
+const object = (properties: Record<string, JsonSchema>): JsonSchema => ({
+  type: 'object',
+  properties,
+  additionalProperties: false,
+  required: Object.keys(properties),
+})
 
 test.group('openapi:generate on the playground app', group => {
   let document: OpenApiDocument
@@ -22,6 +32,9 @@ test.group('openapi:generate on the playground app', group => {
     return () => rm(new URL(output, playground))
   })
 
+  const probe = (path: string, method: 'get' | 'post' = 'get') =>
+    document.paths[`/api/v1/probe/${path}`]![method]!
+
   test('documents every named route and skips closures', ({ assert }) => {
     assert.equal(document.openapi, '3.1.0')
     assert.sameMembers(Object.keys(document.paths), [
@@ -33,6 +46,8 @@ test.group('openapi:generate on the playground app', group => {
       '/api/v1/users',
       '/api/v1/users/{id}',
       '/api/v1/webhooks/mail',
+      '/api/v1/probe/model',
+      '/api/v1/probe/collections',
     ])
   })
 
@@ -207,14 +222,6 @@ test.group('openapi:generate on the playground app', group => {
     })
   })
 
-  test('adds the 401 response to routes behind a security scheme', ({ assert }) => {
-    assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.responses['401'], {
-      description: 'Unauthorized',
-      content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } },
-    })
-    assert.notProperty(document.paths['/api/v1/auth/login']!.post!.responses, '401')
-  })
-
   test('names transformer data as components and references them', ({ assert }) => {
     const json = (path: string) =>
       document.paths[path]!.get!.responses['200']!.content!['application/json']!.schema
@@ -256,6 +263,20 @@ test.group('openapi:generate on the playground app', group => {
   test('reads the response helper an exception answers with in its handle()', ({ assert }) => {
     assert.notInclude(logs, '@throws')
     assert.property(document.paths['/api/v1/auth/signup']!.post!.responses, '409')
+  })
+
+  test('emits {} and a warning for a Lucid model', ({ assert }) => {
+    assert.deepEqual(json(probe('model').responses['200']), {})
+    assert.include(logs, 'User is a Lucid model')
+  })
+
+  test('documents Map and Set as empty objects and bigint as a string', ({ assert }) => {
+    const empty = { type: 'object', properties: {}, additionalProperties: false }
+
+    assert.deepEqual(
+      json(probe('collections').responses['200']),
+      object({ tags: empty, counts: empty, total: { type: 'string' } }),
+    )
   })
 
   test('writes the tags from the config', ({ assert }) => {

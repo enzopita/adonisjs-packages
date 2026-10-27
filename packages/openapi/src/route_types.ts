@@ -2,7 +2,14 @@ import ts from 'typescript'
 import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { readKernel, type Kernel } from './kernel.ts'
-import { answers, operationDocs, type Answer, type OperationDocs } from './operation_docs.ts'
+import {
+  answers,
+  handlerResponses,
+  operationDocs,
+  type Answer,
+  type HandlerResponses,
+  type OperationDocs,
+} from './operation_docs.ts'
 import { TypeToSchema } from './type_to_schema.ts'
 import type { OpenApiConfig, RouteOperation } from './types.ts'
 
@@ -12,7 +19,6 @@ import type { OpenApiConfig, RouteOperation } from './types.ts'
  */
 const RESPONSE_HELPERS = {
   ok: 200,
-  json: 200,
   created: 201,
   accepted: 202,
   nonAuthoritativeInformation: 203,
@@ -65,6 +71,7 @@ export class RouteTypes {
   #kernelFile: ts.SourceFile
   #answers = new Map<string, Answer[]>()
   #errorResponses?: { byCode: Map<string, ts.Type[]>; fallback: ts.Type[] }
+  #unauthorizedBody?: ts.Type
 
   constructor(
     appRoot: string,
@@ -118,6 +125,18 @@ export class RouteTypes {
     const kernelFile = program.getSourceFile(join(appRoot, 'start/kernel.ts'))
     this.#kernelFile = kernelFile ?? entry
     this.#kernel = readKernel(kernelFile)
+
+    const auth = ts.resolveModuleName(
+      '@adonisjs/auth',
+      this.#kernelFile.fileName,
+      config.options,
+      ts.sys,
+    )
+
+    if (!errorResponse && auth.resolvedModule)
+      this.#unauthorizedBody = this.checker.getTypeAtLocation(
+        aliases.find(alias => alias.name.text === 'UnauthorizedBody')!,
+      )
 
     // The config names the error body, so the exception handler is not read.
     if (errorResponse) this.#errorResponses = { byCode: new Map(), fallback: [this.#errorBody] }
@@ -272,10 +291,7 @@ export class RouteTypes {
     )
   }
 
-  /**
-   * The doc comments on the handler, read from the controller class the file exports by default.
-   */
-  docs({ controller }: RouteOperation): OperationDocs {
+  #handler({ controller }: RouteOperation) {
     const file = controller && this.#program.getSourceFile(controller.path)
     const module = file && this.checker.getSymbolAtLocation(file)
     const exported = module && this.checker.tryGetMemberInModuleExports('default', module)
@@ -294,9 +310,41 @@ export class RouteTypes {
         member.name.text === controller?.method,
     )
 
-    return declaration && method
-      ? operationDocs(this.checker, this.#resolveModule, declaration, method)
+    return symbol && declaration && method ? { symbol, declaration, method } : undefined
+  }
+
+  /**
+   * The doc comments on the handler, read from the controller class the file exports by default.
+   */
+  docs(route: RouteOperation): OperationDocs {
+    const handler = this.#handler(route)
+
+    return handler
+      ? operationDocs(this.checker, this.#resolveModule, handler.declaration, handler.method)
       : { responses: {}, problems: [] }
+  }
+
+  /**
+   * What the handler answers with besides its return type, such as `response.send(body)`.
+   */
+  handlerResponses(route: RouteOperation): HandlerResponses {
+    const handler = this.#handler(route)
+
+    return handler
+      ? handlerResponses(
+          this.checker,
+          this.checker.getDeclaredTypeOfSymbol(handler.symbol),
+          handler.method.name.getText(),
+        )
+      : { answers: [], thrown: [], headers: [] }
+  }
+
+  /**
+   * `E_UNAUTHORIZED_ACCESS` from `@adonisjs/auth` renders its own body through its `handle()`,
+   * which a declaration file does not carry: this is what it sends to a client that accepts JSON.
+   */
+  unauthorizedBody() {
+    return this.#unauthorizedBody
   }
 
   property(type: ts.Type, name: string) {
@@ -343,12 +391,16 @@ function renderEntry(
       `    ${name}<T>(body?: T, etag?: boolean): { __response: T; __status: ${status} }`,
   )
 
-  const augmentation = `declare module '@adonisjs/core/http' {\n  interface HttpResponse {\n${helpers.join('\n')}\n  }\n}`
+  // Tuyau types `json()` as a `200`, but it keeps the status already set. Declared later, this overload is picked first.
+  const json = '    json<T>(body: T, generateEtag?: boolean): { __response: T }'
+
+  const augmentation = `declare module '@adonisjs/core/http' {\n  interface HttpResponse {\n${[...helpers, json].join('\n')}\n  }\n}`
 
   return [
     ...imports,
     validationError,
     `export type ErrorBody = ${errorResponse ? toRelative(errorResponse) : '{ message: string }'}`,
+    'export type UnauthorizedBody = { errors: { message: string }[] }',
     augmentation,
     `export interface Routes {\n${members.join('\n')}\n}`,
   ].join('\n')

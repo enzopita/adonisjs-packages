@@ -93,14 +93,27 @@ async function validatorSchemas(
   return schemas
 }
 
-/**
- * Bodies with the same schema, such as two exceptions rendered by the same handler, appear once.
- */
-function withBodies(response: OpenApiResponse, schemas: JsonSchema[]): OpenApiResponse {
-  const unique = [...new Map(schemas.map(schema => [JSON.stringify(schema), schema])).values()]
-  const schema = unique.length > 1 ? { oneOf: unique } : unique[0]
+interface Body {
+  mediaType: string
+  schema: JsonSchema
+}
 
-  return schema ? { ...response, content: { 'application/json': { schema } } } : response
+/**
+ * Everything an operation can answer with under one status code. Every source (the return type,
+ * the handler's own response calls, `@throws`, the validator, the middleware) adds to it, so
+ * branches that share a status code all end up in its body.
+ */
+interface Outcome {
+  /**
+   * The descriptions `@throws` tags give, joined into the response description.
+   */
+  reasons: string[]
+  bodies: Body[]
+  headers: Set<string>
+  /**
+   * Whether the handler can also answer with no body, as when it returns `T | undefined`.
+   */
+  optional: boolean
 }
 
 const EMPTY_STATUSES = new Set(['204', '205', '304'])
@@ -108,88 +121,165 @@ const EMPTY_STATUSES = new Set(['204', '205', '304'])
 const WITHOUT_BODY =
   ts.TypeFlags.Any | ts.TypeFlags.Unknown | ts.TypeFlags.Void | ts.TypeFlags.Undefined
 
+const BINARY: Body = {
+  mediaType: 'application/octet-stream',
+  schema: { type: 'string', format: 'binary' },
+}
+
+/**
+ * Bodies with the same schema, such as two exceptions rendered by the same handler, appear once.
+ */
+function render(code: string, { reasons, bodies, headers, optional }: Outcome): OpenApiResponse {
+  const status = STATUS_CODES[Number(code)] ?? 'Response'
+  const description = reasons.join('; ') || status
+
+  const response: OpenApiResponse = {
+    description: optional ? `${description}, or no body` : description,
+  }
+
+  if (headers.size)
+    response.headers = Object.fromEntries(
+      [...headers].map(name => [name, { schema: { type: 'string' } }]),
+    )
+
+  if (EMPTY_STATUSES.has(code) || !bodies.length) return response
+
+  const content: NonNullable<OpenApiResponse['content']> = {}
+
+  for (const mediaType of new Set(bodies.map(body => body.mediaType))) {
+    const schemas = bodies.filter(body => body.mediaType === mediaType).map(body => body.schema)
+    const unique = [...new Map(schemas.map(schema => [JSON.stringify(schema), schema])).values()]
+
+    content[mediaType] = { schema: unique.length > 1 ? { oneOf: unique } : unique[0]! }
+  }
+
+  return { ...response, content }
+}
+
 function responsesFor(
   route: RouteOperation,
   types: RouteTypes,
   response: ts.Type | undefined,
   thrown: Record<string, ThrownResponse>,
-  answered: { code: string; body?: ts.Type }[],
   secured: boolean,
   warnings: string[],
 ) {
-  const responses: Record<string, OpenApiResponse> = {}
+  const outcomes = new Map<string, Outcome>()
+  const handler = types.handlerResponses(route)
+  // A body returned or sent without a status keeps the one `response.status(...)` set.
+  const plain = handler.status ?? '200'
 
-  const describe = (code: string, payload?: ts.Type) => {
-    const description = STATUS_CODES[Number(code)] ?? 'Response'
-    const empty = !payload || EMPTY_STATUSES.has(code) || payload.flags & WITHOUT_BODY
+  const outcome = (code: string) => {
+    let found = outcomes.get(code)
 
-    responses[code] = empty
-      ? { description }
-      : { description, content: { 'application/json': { schema: types.schemas.convert(payload) } } }
+    if (!found) {
+      found = { reasons: [], bodies: [], headers: new Set(), optional: false }
+      outcomes.set(code, found)
+    }
+
+    return found
+  }
+
+  const json = (type: ts.Type): Body => ({
+    mediaType: 'application/json',
+    schema: types.schemas.convert(type),
+  })
+
+  // AdonisJS sends a string as `text/plain`, and a literal `content-type` header replaces either.
+  const handlerBody = (type: ts.Type): Body => {
+    const text = type.flags & ts.TypeFlags.StringLike
+
+    return {
+      mediaType: handler.contentType ?? (text ? 'text/plain' : 'application/json'),
+      schema: types.schemas.convert(type),
+    }
+  }
+
+  const answer = (code: string, body?: Body, headers: string[] = []) => {
+    const found = outcome(code)
+
+    if (body) found.bodies.push(body)
+
+    for (const header of [...handler.headers, ...headers]) found.headers.add(header)
   }
 
   let members: ts.Type[] = []
 
   if (response) members = response.isUnion() ? response.types : [response]
 
+  let optional = false
+  let returnsPlain = false
+
   for (const member of members) {
     const status = types.property(member, '__status')
     const payload = types.property(member, '__response')
 
-    if (status && payload) {
-      describe(status.isNumberLiteral() ? String(status.value) : 'default', payload)
-    } else if (!(member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))) {
-      describe('200', member)
+    if (payload) {
+      let code = plain
+
+      if (status) code = status.isNumberLiteral() ? String(status.value) : 'default'
+
+      answer(code, payload.flags & WITHOUT_BODY ? undefined : handlerBody(payload))
+    } else if (member.flags & ts.TypeFlags.Null) answer('204')
+    else if (member.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined)) optional = true
+    else if (!(member.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown))) {
+      returnsPlain = true
+      answer(plain, handlerBody(member))
     }
   }
 
-  const validationError = route.validator && types.validationError()
+  for (const { code = plain, body, binary, headers } of handler.answers) {
+    const payload = body && !(body.flags & WITHOUT_BODY) ? handlerBody(body) : undefined
+
+    answer(code, binary ? BINARY : payload, headers)
+  }
+
+  if (optional && returnsPlain) outcome(plain).optional = true
+
+  for (const { code = plain, body } of handler.thrown)
+    outcome(code).bodies.push(...(body ? [json(body)] : []))
+
+  const typed = outcomes.size > 0
 
   for (const [code, { description, bodies }] of Object.entries(thrown)) {
-    if (responses[code]) continue
+    const found = outcome(code)
 
-    // The validator's error shares the status code an exception documents, so the body is either.
-    const schemas = [
-      ...bodies,
-      ...(code === '422' && validationError ? [validationError] : []),
-    ].map(body => types.schemas.convert(body))
-
-    responses[code] = withBodies({ description }, schemas)
+    found.reasons.push(description)
+    found.bodies.push(...bodies.map(json))
   }
 
-  if (validationError && !responses['422']) describe('422', validationError)
+  // The validator's error shares the status code an exception documents, so the body is either.
+  const validationError = route.validator && types.validationError()
 
-  for (const { code } of answered) {
-    const bodies = answered.filter(answer => answer.code === code).flatMap(({ body }) => body ?? [])
+  if (validationError) outcome('422').bodies.push(json(validationError))
 
-    responses[code] ??= withBodies(
-      { description: STATUS_CODES[Number(code)] ?? 'Response' },
-      bodies.map(body => types.schemas.convert(body)),
-    )
-  }
-
-  if (secured && !responses['401']) describe('401')
+  for (const { code, body } of types.middlewareResponses(route))
+    outcome(code).bodies.push(...(body ? [json(body)] : []))
 
   // An error the app answers without a documented body, such as a `@throws {404}` or the 401 of a
   // secured route, gets the body its exception handler renders.
   const { byCode, fallback } = types.errorResponses()
 
-  for (const [code, response] of Object.entries(responses)) {
-    if (Number(code) >= 400 && !response.content)
-      responses[code] = withBodies(
-        response,
-        (byCode.get(code) ?? fallback).map(body => types.schemas.convert(body)),
-      )
+  if (secured) {
+    const auth = types.unauthorizedBody()
+    const unauthorized = byCode.get('401') ?? (auth ? [auth] : [])
+
+    outcome('401').bodies.push(...unauthorized.map(json))
   }
 
-  if (!Object.keys(responses).some(code => code.startsWith('2') || code === 'default')) {
+  for (const [code, found] of outcomes) {
+    if (Number(code) >= 400 && !found.bodies.length)
+      found.bodies.push(...(byCode.get(code) ?? fallback).map(json))
+  }
+
+  if (!typed) {
     warnings.push(
       `${route.name}: the handler's return type is unknown, returning serialize(...) makes it typed`,
     )
-    responses['200'] = { description: 'OK' }
+    outcome('200')
   }
 
-  return responses
+  return Object.fromEntries([...outcomes].map(([code, found]) => [code, render(code, found)]))
 }
 
 function parametersFor(route: RouteOperation, query?: JsonSchema, params?: JsonSchema) {
@@ -247,15 +337,7 @@ export async function generateDocument(
       ? [Object.fromEntries(schemes.map(scheme => [scheme, []]))]
       : []
 
-    const responses = responsesFor(
-      route,
-      types,
-      response,
-      thrown,
-      types.middlewareResponses(route),
-      security.length > 0,
-      warnings,
-    )
+    const responses = responsesFor(route, types, response, thrown, security.length > 0, warnings)
 
     const methods = paths[route.path] ?? {}
     paths[route.path] = methods

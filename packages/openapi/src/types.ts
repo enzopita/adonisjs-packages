@@ -100,6 +100,7 @@ export interface OpenApiParameter {
 
 export interface OpenApiResponse {
   description: string
+  headers?: Record<string, { schema: JsonSchema }>
   content?: Record<string, { schema: JsonSchema }>
 }
 

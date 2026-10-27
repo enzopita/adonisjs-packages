@@ -93,14 +93,19 @@ function property(checker: ts.TypeChecker, type: ts.Type, name: string) {
 }
 
 /**
- * The calls `methods` make on an `HttpResponse`, also inside the functions of the app they
- * call, such as a shared `renderError(ctx, error)`. Functions from packages are not followed.
+ * The calls `methods` make on an `HttpResponse` and the exceptions they `throw new`, also inside
+ * the functions of the app they call, such as a shared `renderError(ctx, error)`. Functions from
+ * packages are not followed.
  */
 function responseCalls(checker: ts.TypeChecker, instance: ts.Type, methods = ['handle']) {
   const calls: { name: string; call: ts.CallExpression }[] = []
+  const throws: ts.NewExpression[] = []
   const visited = new Set<ts.Node>()
 
   const visit = (node: ts.Node) => {
+    if (ts.isThrowStatement(node) && node.expression && ts.isNewExpression(node.expression))
+      throws.push(node.expression)
+
     if (ts.isCallExpression(node)) {
       const callee = node.expression
 
@@ -138,7 +143,7 @@ function responseCalls(checker: ts.TypeChecker, instance: ts.Type, methods = ['h
   for (const method of methods)
     follow(checker.getPropertyOfType(instance, method)?.valueDeclaration)
 
-  return calls
+  return { calls, throws }
 }
 
 /**
@@ -156,7 +161,7 @@ function exceptionResponse(
   instance: ts.Type,
   problems: string[],
 ): Thrown[] {
-  const calls = responseCalls(checker, instance)
+  const { calls } = responseCalls(checker, instance)
 
   const called = (...names: string[]) =>
     calls.filter(({ name }) => names.includes(name)).map(({ call }) => call)
@@ -310,41 +315,138 @@ export interface Answer {
    */
   code?: string
   body?: ts.Type
+  /**
+   * The bytes of a file or a stream, from `download()`, `attachment()` or `stream()`.
+   */
+  binary?: true
+  headers?: string[]
+}
+
+function chainedStatus(checker: ts.TypeChecker, call: ts.CallExpression) {
+  const receiver = ts.isPropertyAccessExpression(call.expression)
+    ? call.expression.expression
+    : undefined
+
+  return receiver &&
+    ts.isCallExpression(receiver) &&
+    ts.isPropertyAccessExpression(receiver.expression) &&
+    receiver.expression.name.text === 'status' &&
+    receiver.arguments[0]
+    ? statusOf(checker.getTypeAtLocation(receiver.arguments[0]))
+    : undefined
+}
+
+/**
+ * `abort()` and `redirect()` default to `400` and `302`, as `HttpResponse` does.
+ */
+function answerOf(checker: ts.TypeChecker, name: string, call: ts.CallExpression): Answer[] {
+  const args = call.arguments
+  const typeOf = (index: number) => args[index] && checker.getTypeAtLocation(args[index])
+
+  switch (name) {
+    case 'send':
+    case 'json': {
+      const code = chainedStatus(checker, call)
+
+      return args[0] ? [{ ...(code && { code }), body: typeOf(0) }] : []
+    }
+
+    case 'abort':
+      return [{ code: statusOf(typeOf(1)) ?? '400', body: typeOf(0) }]
+    case 'abortIf':
+    case 'abortUnless':
+      return [{ code: statusOf(typeOf(2)) ?? '400', body: typeOf(1) }]
+    case 'redirect':
+      return [{ code: statusOf(typeOf(2)) ?? '302', headers: ['Location'] }]
+    case 'stream':
+    case 'download':
+      return [{ binary: true }]
+    case 'attachment':
+      return [{ binary: true, headers: ['Content-Disposition'] }]
+  }
+
+  const type = checker.getTypeAtLocation(call)
+  const code = statusOf(property(checker, type, '__status'))
+  const body = args[0] && property(checker, type, '__response')
+
+  return code ? [{ code, ...(body && { body }) }] : []
+}
+
+function thrownAnswers(checker: ts.TypeChecker, throws: ts.NewExpression[]): Answer[] {
+  return throws.flatMap(expression => {
+    const constructor = checker.getTypeAtLocation(expression.expression)
+    const instance = checker.getTypeAtLocation(expression)
+
+    // A thrown class without a status, such as a plain `Error`, is left to the exception handler.
+    return exceptionResponse(checker, constructor, instance, []).flatMap(({ code, bodies }) =>
+      bodies.length ? bodies.map(body => ({ code, body })) : [{ code }],
+    )
+  })
 }
 
 /**
  * What `methods` of a middleware or exception handler answer with: a helper such as
- * `response.forbidden(body)`, or `send()` and `json()`, whose status is the literal of a
- * `response.status(403)` they are chained to.
+ * `response.forbidden(body)`, `send()` and `json()`, whose status is the literal of a
+ * `response.status(403)` they are chained to, `abort()`, `redirect()`, or an exception they throw.
  */
 export function answers(checker: ts.TypeChecker, instance: ts.Type, methods: string[]): Answer[] {
-  return responseCalls(checker, instance, methods).flatMap(({ name, call }): Answer[] => {
-    const [argument] = call.arguments
-    const callee = call.expression
+  const { calls, throws } = responseCalls(checker, instance, methods)
 
-    if (name === 'send' || name === 'json') {
-      const receiver = ts.isPropertyAccessExpression(callee) ? callee.expression : undefined
+  return [
+    ...calls.flatMap(({ name, call }) => answerOf(checker, name, call)),
+    ...thrownAnswers(checker, throws),
+  ]
+}
 
-      const status =
-        receiver &&
-        ts.isCallExpression(receiver) &&
-        ts.isPropertyAccessExpression(receiver.expression) &&
-        receiver.expression.name.text === 'status' &&
-        receiver.arguments[0]
-          ? statusOf(checker.getTypeAtLocation(receiver.arguments[0]))
-          : undefined
+export interface HandlerResponses {
+  answers: Answer[]
+  /**
+   * The responses of the exceptions the handler throws, which the headers it sets do not reach.
+   */
+  thrown: Answer[]
+  /**
+   * The names of the headers set with a literal name, such as `response.header('Retry-After', ...)`.
+   */
+  headers: string[]
+  /**
+   * The literal `content-type` the handler sets, which every body it sends has.
+   */
+  contentType?: string
+  /**
+   * The literal of a `response.status(201)` call of its own, which a returned body is sent with.
+   */
+  status?: string
+}
 
-      return argument
-        ? [{ ...(status && { code: status }), body: checker.getTypeAtLocation(argument) }]
-        : []
-    }
+export function handlerResponses(
+  checker: ts.TypeChecker,
+  controller: ts.Type,
+  method: string,
+): HandlerResponses {
+  const { calls, throws } = responseCalls(checker, controller, [method])
 
-    const type = checker.getTypeAtLocation(call)
-    const code = statusOf(property(checker, type, '__status'))
-    const body = argument && property(checker, type, '__response')
+  const handler: HandlerResponses = {
+    answers: [],
+    thrown: thrownAnswers(checker, throws),
+    headers: [],
+  }
 
-    return code ? [{ code, ...(body && { body }) }] : []
-  })
+  for (const { name, call } of calls) {
+    const [first, second] = call.arguments
+
+    if (name === 'header' || name === 'append' || name === 'safeHeader') {
+      if (!first || !ts.isStringLiteralLike(first)) continue
+
+      const value = second && checker.getTypeAtLocation(second)
+
+      if (first.text.toLowerCase() !== 'content-type') handler.headers.push(first.text)
+      else if (value?.isStringLiteral()) handler.contentType = value.value
+    } else if (name === 'status' && ts.isExpressionStatement(call.parent)) {
+      handler.status = first && statusOf(checker.getTypeAtLocation(first))
+    } else handler.answers.push(...answerOf(checker, name, call))
+  }
+
+  return handler
 }
 
 export function operationDocs(

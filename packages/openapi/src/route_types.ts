@@ -5,14 +5,9 @@ import { readKernel, type Kernel } from './kernel.ts'
 import { ConfiguredErrors } from './errors_config.ts'
 import { exceptionIndex } from './exception_index.ts'
 import { ExceptionResponses } from './exception_responses.ts'
-import {
-  answers,
-  handlerResponses,
-  operationDocs,
-  type Answer,
-  type HandlerResponses,
-  type OperationDocs,
-} from './operation_docs.ts'
+import type { Answer } from './analysis/answers.ts'
+import { handlerResponses, type HandlerResponses } from './analysis/handler_responses.ts'
+import { operationDocs, type OperationDocs } from './operation_docs.ts'
 import { defaultExport, isAppSource, property } from './analysis/symbols.ts'
 import type { FindException } from './throws_tag.ts'
 import { TypeToSchema } from './type_to_schema.ts'
@@ -268,7 +263,7 @@ export class RouteTypes {
 
     if (!found) {
       const instance = this.#defaultInstance(specifier)
-      const read = instance && answers(this.checker, instance, ['handle'])
+      const read = instance && handlerResponses(this.checker, instance, 'handle')
       found = read ? [...read.answers, ...this.exceptions.thrownAnswers(read.throws)] : []
       this.#answers.set(specifier, found)
     }

@@ -5,7 +5,8 @@ import {
   type ExceptionHandlerAnswers,
   type HandlerBranch,
 } from './exception_handler.ts'
-import { exceptionResponse, type Answer, type Thrown } from './operation_docs.ts'
+import type { Answer } from './analysis/answers.ts'
+import { exceptionResponse, type Thrown } from './analysis/exceptions/own_response.ts'
 import type { Diagnostic } from './types.ts'
 
 /**

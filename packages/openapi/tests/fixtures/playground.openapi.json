@@ -2450,6 +2450,30 @@
       }
     },
     "responses": {
+      "EmailNotVerifiedException": {
+        "description": "The email address of the account is not verified",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "const": "E_EMAIL_NOT_VERIFIED"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ]
+            }
+          }
+        }
+      },
       "EmailTakenException": {
         "description": "Another account uses this email address",
         "content": {
@@ -2484,30 +2508,6 @@
                 "code": {
                   "type": "string",
                   "const": "E_INVALID_TENANT_HEADER"
-                },
-                "message": {
-                  "type": "string"
-                }
-              },
-              "additionalProperties": false,
-              "required": [
-                "code",
-                "message"
-              ]
-            }
-          }
-        }
-      },
-      "EmailNotVerifiedException": {
-        "description": "The email address of the account is not verified",
-        "content": {
-          "application/json": {
-            "schema": {
-              "type": "object",
-              "properties": {
-                "code": {
-                  "type": "string",
-                  "const": "E_EMAIL_NOT_VERIFIED"
                 },
                 "message": {
                   "type": "string"

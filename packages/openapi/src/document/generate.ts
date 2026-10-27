@@ -28,7 +28,7 @@ export async function generateDocument(
 
   const paths: OpenApiDocument['paths'] = {}
   const provenance: GeneratedDocument['provenance'] = {}
-  const components = new ResponseComponents()
+  const components = new ResponseComponents(appRoot)
 
   // A route with an optional param has a path without it too, which shares everything else.
   for (const [name, variants] of Map.groupBy(routes, route => route.name)) {
@@ -83,13 +83,15 @@ export async function generateDocument(
 
   for (const model of types.schemas.models) diagnostics.push(lucidModel(model))
 
+  const responses = components.responses()
+
   const document: OpenApiDocument = {
     openapi: '3.1.0',
     info: config.document.info,
     paths,
     components: {
       schemas: types.schemas.components,
-      ...(Object.keys(components.responses).length > 0 && { responses: components.responses }),
+      ...(Object.keys(responses).length > 0 && { responses }),
       securitySchemes: config.security.schemes,
     },
   }

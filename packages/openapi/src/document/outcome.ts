@@ -103,7 +103,7 @@ function render(
 
   const shared = sharedOwner(reasons, owners)
 
-  return shared ? components.ref(shared.name, code, response) : response
+  return shared ? components.ref(shared, code, response) : response
 }
 
 /**

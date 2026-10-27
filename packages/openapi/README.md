@@ -235,7 +235,7 @@ A response that comes only from such a class goes to `components.responses`, und
 - `@response {N} reason` or `@throws {Class} reason` on the action describes the response inline for that operation instead.
 - When several sources share a status, such as a middleware's `403` and the `403` of `bouncer.authorize()`, the response stays inline. Its description joins the reasons of their classes, and the status text stands for the sources without one: `The email address of the account is not verified; Forbidden`.
 - Classes from packages, inline middleware, the handler's own responses, the `401` of a secured route and the `422` of the validator have no reason, so their responses keep the status text.
-- When two responses of the document would take one name, the second is named after its status code too, such as `LimitException_402`.
+- A name depends only on the responses of the document, not on the order of the routes. A class exported as `export default class extends Exception {}` is named after its file: `plan_frozen_exception.ts` gives `PlanFrozenException`. When different responses would take one name, each is named after its status code too, such as `LimitException_402`. When that is still not enough, because two classes share a name and a status, each is named after the module of its class too, such as `app.exceptions.billing.limit_exception.LimitException_402`.
 
 ## Exception responses
 

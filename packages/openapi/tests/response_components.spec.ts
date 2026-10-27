@@ -1,6 +1,15 @@
+import { cp, readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
-import { generatePlayground, json, object } from './support/playground.ts'
+import {
+  componentsApp,
+  generateInCopy,
+  generatePlayground,
+  json,
+  object,
+} from './support/playground.ts'
 
 const emailTaken = object({
   code: { type: 'string', const: 'E_EMAIL_TAKEN' },
@@ -72,5 +81,67 @@ test.group('openapi:generate on the playground app: responses described once', g
   test('keeps the status text for a class without a doc comment', ({ assert }) => {
     assert.containsSubset(probe('plan').responses['402'], { description: 'Payment Required' })
     assert.notProperty(document.components.responses ?? {}, 'PlanLimitException')
+  })
+})
+
+test.group('openapi:generate: names of shared responses', group => {
+  let documents: OpenApiDocument[]
+
+  /**
+   * The fixture's routes, in their order or reversed.
+   */
+  const generate = async (reversed: boolean) => {
+    const { dir } = await generateInCopy(async copy => {
+      await cp(fileURLToPath(componentsApp), copy, { recursive: true })
+
+      if (!reversed) return
+
+      const routes = join(copy, 'start/routes.ts')
+      const lines = (await readFile(routes, 'utf8')).trimEnd().split('\n')
+      const first = lines.findIndex(line => line.startsWith('router.'))
+
+      await writeFile(
+        routes,
+        [...lines.slice(0, first), ...lines.slice(first).reverse()].join('\n'),
+      )
+    })
+
+    const document: OpenApiDocument = JSON.parse(await readFile(join(dir, 'openapi.json'), 'utf8'))
+
+    return document
+  }
+
+  group.setup(async () => {
+    documents = [await generate(false), await generate(true)]
+  })
+
+  test('names a response after its class, its status and its module when classes share a name', ({
+    assert,
+  }) => {
+    for (const document of documents) {
+      const ref = (path: string, code: string) => document.paths[`/${path}`]!.get!.responses[code]
+
+      assert.deepEqual(Object.keys(document.components.responses ?? {}), [
+        'LimitException_413',
+        'PlanFrozenException',
+        'app.exceptions.billing.limit_exception.LimitException_402',
+        'app.exceptions.storage.limit_exception.LimitException_402',
+      ])
+      assert.deepEqual(ref('billing', '402'), {
+        $ref: '#/components/responses/app.exceptions.billing.limit_exception.LimitException_402',
+      })
+      assert.deepEqual(ref('storage', '402'), {
+        $ref: '#/components/responses/app.exceptions.storage.limit_exception.LimitException_402',
+      })
+      assert.deepEqual(ref('quota', '413'), { $ref: '#/components/responses/LimitException_413' })
+      assert.deepEqual(ref('frozen', '423'), { $ref: '#/components/responses/PlanFrozenException' })
+    }
+  })
+
+  test('gives the same names whatever the order of the routes', ({ assert }) => {
+    const [inOrder, reversed] = documents
+
+    assert.deepEqual(reversed!.components.responses, inOrder!.components.responses)
+    assert.deepEqual(reversed!.paths, inOrder!.paths)
   })
 })

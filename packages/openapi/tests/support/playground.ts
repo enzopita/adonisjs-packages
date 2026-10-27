@@ -15,6 +15,7 @@ export const playground = new URL('../../../../playground/', import.meta.url)
 export const brokenApp = new URL('../fixtures/broken_app/', import.meta.url)
 export const unauthorizedApp = new URL('../fixtures/unauthorized_app/', import.meta.url)
 export const inlineApp = new URL('../fixtures/inline_app/', import.meta.url)
+export const componentsApp = new URL('../fixtures/components_app/', import.meta.url)
 export const run = promisify(execFile)
 
 /**

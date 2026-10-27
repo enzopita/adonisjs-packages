@@ -7,6 +7,7 @@ import {
 } from './exception_handler.ts'
 import type { Answer } from './analysis/answers.ts'
 import { exceptionResponse, type Thrown } from './analysis/exceptions/own_response.ts'
+import { ownBodyUndeclared } from './diagnostics/errors.ts'
 import type { Diagnostic } from './types.ts'
 
 /**
@@ -24,9 +25,7 @@ export class ExceptionResponses {
    * carry, by the symbol of its class.
    */
   #packaged: Map<ts.Symbol, ts.Type[]>
-  /**
-   * The `OA-E002` the exceptions read so far raised, once per class.
-   */
+  #undeclared = new Set<string>()
   readonly diagnostics: Diagnostic[] = []
 
   constructor(
@@ -123,13 +122,10 @@ export class ExceptionResponses {
 
         if (packaged) return codes.map(code => ({ code, bodies: packaged }))
 
-        if (!this.diagnostics.some(({ message }) => message.startsWith(`${exception.name} `)))
-          this.diagnostics.push({
-            code: 'OA-E002',
-            severity: 'warning',
-            message: `${exception.name} renders its own body, which its package does not declare: it is documented without one`,
-            fix: "render it in an `instanceof` branch of the exception handler's handle()",
-          })
+        if (!this.#undeclared.has(exception.name)) {
+          this.#undeclared.add(exception.name)
+          this.diagnostics.push(ownBodyUndeclared(exception.name))
+        }
 
         return codes.map(code => ({ code, bodies: [] }))
       }

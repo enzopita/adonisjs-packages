@@ -1,6 +1,7 @@
 import { RoutesScanner } from '@adonisjs/assembler/routes_scanner'
 import type { RoutesListItem } from '@adonisjs/assembler/types'
 import type { Router } from '@adonisjs/core/http'
+import { closureRoute } from './diagnostics/route.ts'
 import type {
   Diagnostic,
   HttpMethod,
@@ -80,12 +81,7 @@ export async function collectRoutes(
       if (!(route.handler instanceof Function)) return true
 
       if (!DOCS_ROUTES.has(route.name ?? '') && isIncluded(route.name ?? '', config.routes))
-        diagnostics.push({
-          code: 'OA-R001',
-          severity: 'warning',
-          route: route.name ?? `${route.methods.join(',')} ${route.pattern}`,
-          message: 'closure handlers have no types to read, the route is skipped',
-        })
+        diagnostics.push(closureRoute(route.name ?? `${route.methods.join(',')} ${route.pattern}`))
 
       return false
     }),

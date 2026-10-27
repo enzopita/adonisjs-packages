@@ -5,10 +5,17 @@ import type { ApplicationService } from '@adonisjs/core/types'
 import type { Router } from '@adonisjs/core/http'
 import { property } from './analysis/symbols.ts'
 import { collectRoutes } from './collect_routes.ts'
-import type { OperationDocs } from './operation_docs.ts'
-import { applicable, underivedResponse } from './response_tag.ts'
+import { applicable } from './analysis/tags/response_tag.ts'
+import type { OperationDocs } from './analysis/tags/operation_docs.ts'
+import {
+  lucidModel,
+  noJsonSchema,
+  statuslessException,
+  underivedResponse,
+  unknownReturnType,
+  unreadableValidator,
+} from './diagnostics/route.ts'
 import { RouteTypes } from './route_types.ts'
-import { statuslessException } from './throws_tag.ts'
 import type {
   Diagnostic,
   JsonSchema,
@@ -93,12 +100,7 @@ async function validatorSchemas(
       if (validator) schemas.set(route.name, validator.toJSONSchema())
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      diagnostics.push({
-        code: 'OA-V001',
-        severity: 'warning',
-        route: route.name,
-        message: `cannot read the JSON Schema of ${specifier}#${exportName} (${reason})`,
-      })
+      diagnostics.push(unreadableValidator(route.name, specifier, exportName, reason))
     }
   }
 
@@ -271,7 +273,8 @@ function responsesFor(
     const responses = types.exceptions.responses(exception)
     const location = types.location(tag)
 
-    if (!responses.length) diagnostics.push(statuslessException(route.name, exception, location))
+    if (!responses.length)
+      diagnostics.push(statuslessException(route.name, exception.name, location))
 
     for (const { code, bodies } of responses)
       thrown({ kind: 'tag', tag: '@throws', location }, code, bodies, reason)
@@ -316,14 +319,7 @@ function responsesFor(
   const typed = outcomes.size > 0
 
   if (!typed) {
-    diagnostics.push({
-      code: 'OA-R002',
-      severity: 'warning',
-      route: route.name,
-      message: "the handler's return type is unknown",
-      fix: 'return serialize(...) to make it typed',
-      ...(returned.location && { location: returned.location }),
-    })
+    diagnostics.push(unknownReturnType(route.name, returned.location))
     outcome('200').sources.push(returned)
   }
 
@@ -380,15 +376,9 @@ export async function generateDocument(
     const input = request && mergeSchemas(vine.get(route.name), types.schemas.convert(request))
     const fields = input && pick(input, key => !NOT_IN_BODY.has(key))
 
-    const { throws, responses: tagged, requestBody, problems, ...docs } = types.docs(route)
+    const { meta, throws, responses: tagged, requestBody, problems } = types.docs(route)
 
-    diagnostics.push(
-      ...problems.map(({ node, ...problem }): Diagnostic => ({
-        ...problem,
-        route: route.name,
-        location: types.location(node),
-      })),
-    )
+    diagnostics.push(...problems.map((problem): Diagnostic => ({ ...problem, route: route.name })))
 
     // Entries of `security` are alternatives, so the schemes a route requires together share one entry.
     const secured = route.middleware.filter(name => config.middlewareSecurity[name])
@@ -423,8 +413,8 @@ export async function generateDocument(
       const operation: OpenApiOperation = {
         operationId:
           route.methods.length > 1 ? `${route.operationId}.${method}` : route.operationId,
-        ...docs,
-        tags: docs.tags ?? [route.name.split('.')[0] ?? route.name],
+        ...meta,
+        tags: meta.tags ?? [route.name.split('.')[0] ?? route.name],
         responses,
       }
 
@@ -446,22 +436,9 @@ export async function generateDocument(
 
   diagnostics.push(...types.exceptions.diagnostics, ...types.errors.diagnostics)
 
-  for (const type of types.schemas.unsupported) {
-    diagnostics.push({
-      code: 'OA-J001',
-      severity: 'warning',
-      message: `no JSON Schema for the type ${type}, emitted {}`,
-    })
-  }
+  for (const type of types.schemas.unsupported) diagnostics.push(noJsonSchema(type))
 
-  for (const model of types.schemas.models) {
-    diagnostics.push({
-      code: 'OA-J002',
-      severity: 'warning',
-      message: `${model} is a Lucid model, emitted {}`,
-      fix: 'return it through a transformer',
-    })
-  }
+  for (const model of types.schemas.models) diagnostics.push(lucidModel(model))
 
   const document: OpenApiDocument = {
     openapi: '3.1.0',

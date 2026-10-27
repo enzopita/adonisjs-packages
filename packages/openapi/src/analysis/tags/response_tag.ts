@@ -1,8 +1,9 @@
 import ts from 'typescript'
-import type { ResolveModule } from './analysis/symbols.ts'
-import { namedType, tagText, type Problem } from './operation_docs.ts'
-import { reasonOf } from './throws_tag.ts'
-import type { Diagnostic, SourceLocation } from './types.ts'
+import { inlineObjectType, responseStatusInvalid } from '../../diagnostics/tags.ts'
+import type { Diagnostic } from '../../types.ts'
+import { namedType } from './named_type.ts'
+import type { TagContext } from './tag_context.ts'
+import { reasonOf, statusText, tagText } from './tag_text.ts'
 
 export interface ResponseTag {
   code: string
@@ -33,25 +34,13 @@ function braced(text: string) {
 /**
  * `@response {404} reason` or `@response {502} {UpstreamError} reason`.
  */
-export function responseTag(
-  checker: ts.TypeChecker,
-  resolveModule: ResolveModule,
-  method: ts.MethodDeclaration,
-  tag: ts.JSDocTag,
-  problems: Problem[],
-): ResponseTag | undefined {
+export function responseTag(context: TagContext, tag: ts.JSDocTag): ResponseTag | undefined {
   const parsed = braced(tagText(tag))
   const status = parsed?.inner.trim() ?? ''
-  const code = /^[1-5]\d\d$/.test(status) ? status : undefined
+  const code = statusText(status)
 
   if (!parsed || !code) {
-    problems.push({
-      code: 'OA-T004',
-      severity: 'warning',
-      message: `@response: ${parsed ? `${status} is not a status code` : 'expected a status code'}`,
-      fix: 'write it as @response {404} reason or @response {404} {Type} reason',
-      node: tag,
-    })
+    context.problems.push(responseStatusInvalid(context.locate(tag), parsed ? status : undefined))
 
     return undefined
   }
@@ -62,21 +51,15 @@ export function responseTag(
   if (!type) return { code, ...(reason && { reason }), tag }
 
   // A declared response whose type does not resolve would vanish from the document, so it fails generation.
-  const unresolved: Problem[] = []
+  const unresolved: Diagnostic[] = []
+  const inner = type.inner.trim()
 
-  if (type.inner.trim().startsWith('{'))
-    unresolved.push({
-      code: 'OA-T007',
-      severity: 'error',
-      message: `@response {${code}} {${type.inner.trim()}}: an inline object type is not read`,
-      fix: `declare it as a type, such as \`type Body = ${type.inner.trim()}\`, and write \`@response {${code}} {Body}\``,
-      node: tag,
-    })
+  if (inner.startsWith('{')) unresolved.push(inlineObjectType(context.locate(tag), code, inner))
 
   const body =
-    !unresolved.length && namedType(checker, resolveModule, method, tag, type.inner, unresolved)
+    !unresolved.length && namedType({ ...context, problems: unresolved }, tag, type.inner)
 
-  problems.push(...unresolved.map(problem => ({ ...problem, severity: 'error' as const })))
+  context.problems.push(...unresolved.map(problem => ({ ...problem, severity: 'error' as const })))
 
   return body ? { code, body, ...(reason && { reason }), tag } : undefined
 }
@@ -94,20 +77,5 @@ export function applicable(tags: ResponseTag[], documented: (code: string) => bo
   return {
     apply: [...declared, ...described.filter(derived)],
     underived: described.filter(tag => !derived(tag)),
-  }
-}
-
-export function underivedResponse(
-  route: string,
-  code: string,
-  location: SourceLocation,
-): Diagnostic {
-  return {
-    code: 'OA-T003',
-    severity: 'error',
-    route,
-    message: `@response {${code}}: nothing documents a ${code} for this route`,
-    fix: `declare its body with \`@response {${code}} {Type}\`, or remove the tag`,
-    location,
   }
 }

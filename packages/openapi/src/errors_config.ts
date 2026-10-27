@@ -5,6 +5,7 @@ import type { ExceptionResponses } from './exception_responses.ts'
 import type { Thrown } from './analysis/exceptions/own_response.ts'
 import { property } from './analysis/symbols.ts'
 import { callMatches } from './throwers.ts'
+import { entryStatusUnreadable, unmatchedKey } from './diagnostics/errors.ts'
 import type { Diagnostic, ErrorsConfig, ResponseSource, SourceLocation } from './types.ts'
 
 type Kind = 'throwers' | 'middleware'
@@ -82,13 +83,7 @@ export class ConfiguredErrors {
         }
 
         if (!entry.responses.length)
-          this.#problems.push({
-            code: 'OA-E001',
-            severity: 'warning',
-            message: `errors.${kind}['${key}']: the status of ${entry.name} cannot be read, the entry is ignored`,
-            fix: 'name an exception class with a numeric `status` field or `static status`',
-            ...(entry.location && { location: entry.location }),
-          })
+          this.#problems.push(entryStatusUnreadable(kind, key, entry.name, entry.location))
 
         return entry
       },
@@ -107,19 +102,7 @@ export class ConfiguredErrors {
     const unmatched = (['throwers', 'middleware'] as const).flatMap(kind =>
       this.#entriesOf(kind)
         .filter(({ key }) => !this.#matched.has(`${kind}:${key}`))
-        .map(({ key, location }): Diagnostic => ({
-          code: 'OA-E003',
-          severity: 'warning',
-          message:
-            kind === 'throwers'
-              ? `errors.throwers['${key}'] matches no call of the documented routes`
-              : `errors.middleware['${key}'] matches no middleware of the documented routes`,
-          fix:
-            kind === 'throwers'
-              ? 'name the method, such as `findOrFail`, or the names the call goes through, such as `bouncer.authorize`'
-              : 'name the middleware as `node ace list:routes` shows it, such as `auth` or `globalThrottle`, or its specifier in start/kernel.ts',
-          ...(location && { location }),
-        })),
+        .map(({ key, location }) => unmatchedKey(kind, key, location)),
     )
 
     return [...this.#problems, ...unmatched]

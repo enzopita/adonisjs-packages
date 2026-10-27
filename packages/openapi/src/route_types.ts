@@ -3,13 +3,12 @@ import { existsSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { readKernel, type Kernel } from './kernel.ts'
 import { ConfiguredErrors } from './errors_config.ts'
-import { exceptionIndex } from './exception_index.ts'
+import { exceptionIndex, type FindException } from './exception_index.ts'
 import { ExceptionResponses } from './exception_responses.ts'
 import type { Answer } from './analysis/answers.ts'
 import { handlerResponses, type HandlerResponses } from './analysis/handler_responses.ts'
-import { operationDocs, type OperationDocs } from './operation_docs.ts'
+import { operationDocs, type OperationDocs } from './analysis/tags/operation_docs.ts'
 import { defaultExport, isAppSource, property } from './analysis/symbols.ts'
-import type { FindException } from './throws_tag.ts'
 import { TypeToSchema } from './type_to_schema.ts'
 import { unauthorizedException } from './unauthorized.ts'
 import type { ErrorsConfig, RouteOperation, SourceLocation } from './types.ts'
@@ -338,13 +337,16 @@ export class RouteTypes {
 
     return handler
       ? operationDocs(
-          this.checker,
-          this.#resolveModule,
-          this.#findException,
+          {
+            checker: this.checker,
+            resolveModule: this.#resolveModule,
+            findException: this.#findException,
+            locate: node => this.location(node),
+          },
           handler.declaration,
           handler.method,
         )
-      : { throws: [], responses: [], problems: [] }
+      : { meta: {}, throws: [], responses: [], problems: [] }
   }
 
   /**

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -8,6 +8,7 @@ import type { JsonSchema, OpenApiDocument, OpenApiResponse } from '../src/types.
 
 const playground = new URL('../../../playground/', import.meta.url)
 const output = 'tmp/openapi.spec.json'
+const golden = new URL('fixtures/playground.openapi.json', import.meta.url)
 const run = promisify(execFile)
 
 const json = (response: OpenApiResponse | undefined) =>
@@ -470,6 +471,17 @@ test.group('openapi:generate on the playground app', group => {
 
   test('writes the tags from the config', ({ assert }) => {
     assert.deepEqual(document.tags, [{ name: 'Users', description: 'Public user profiles' }])
+  })
+
+  test('matches the committed playground document byte for byte', async ({ assert }) => {
+    const generated = await readFile(new URL(output, playground), 'utf8')
+
+    if (process.env.UPDATE_GOLDEN) await writeFile(golden, generated)
+
+    assert.isTrue(
+      generated === (await readFile(golden, 'utf8')),
+      'The playground document differs from tests/fixtures/playground.openapi.json. If the change is intended, run `UPDATE_GOLDEN=1 pnpm test` in packages/openapi and explain the diff in the PR.',
+    )
   })
 })
 

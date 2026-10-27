@@ -69,9 +69,6 @@ export function fromReturnType(context: ResponseContext, response: ts.Type | und
   if (optional && returnsPlain) outcomes.markOptional(plain)
 }
 
-/**
- * The response calls in the handler, such as `response.send(body)` or `response.download(path)`.
- */
 export function fromAnswers(context: ResponseContext) {
   for (const { code = context.plain, body, binary, headers, node } of context.handler.answers) {
     const payload = body && !(body.flags & WITHOUT_BODY) ? handlerBody(context, body) : undefined

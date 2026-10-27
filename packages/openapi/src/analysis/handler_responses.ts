@@ -10,9 +10,6 @@ export interface HandlerResponses {
    */
   throws: ts.NewExpression[]
   invoked: ts.CallExpression[]
-  /**
-   * The names of the headers set with a literal name, such as `response.header('Retry-After', ...)`.
-   */
   headers: string[]
   /**
    * The literal `content-type` the handler sets, which every body it sends has.

@@ -26,9 +26,6 @@ export interface ConfiguredException {
 export class ConfiguredErrors {
   #checker: ts.TypeChecker
   #errors: ErrorsConfig
-  /**
-   * The type of `config/openapi.ts`, absent when the app has none.
-   */
   #config?: ts.Type
   #exceptions: ExceptionResponses
   #location: (node: ts.Node) => SourceLocation
@@ -93,8 +90,8 @@ export class ConfiguredErrors {
   }
 
   /**
-   * The `OA-E001` the entries raised, and an `OA-E003` for each key no route matched, such as a
-   * misspelled `bouncer.authorise`. Read once every route is documented.
+   * Read once every route is documented, so a key no route matched, such as a misspelled
+   * `bouncer.authorise`, is known by then.
    */
   get diagnostics(): Diagnostic[] {
     const unmatched = (['throwers', 'middleware'] as const).flatMap(kind =>
@@ -106,9 +103,6 @@ export class ConfiguredErrors {
     return [...this.#problems, ...unmatched]
   }
 
-  /**
-   * What the calls an `errors.throwers` key names throw.
-   */
   throwerResponses(invoked: ts.CallExpression[]) {
     return this.#entriesOf('throwers').flatMap(entry =>
       invoked

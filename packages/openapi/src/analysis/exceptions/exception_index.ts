@@ -14,7 +14,7 @@ const EXCEPTIONS_FOLDER = /^app\/(?:.+\/)?exceptions\//
 
 /**
  * Finds the classes extending `Exception` in the app's `app/**\/exceptions/` folders by name, so
- * `@throws {EmailTakenException}` needs no import. Read on the first lookup.
+ * `@throws {EmailTakenException}` needs no import.
  */
 export function exceptionIndex(
   program: ts.Program,

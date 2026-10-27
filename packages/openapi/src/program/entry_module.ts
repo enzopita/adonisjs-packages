@@ -52,9 +52,6 @@ const RESPONSE_HELPERS = {
   httpVersionNotSupported: 505,
 }
 
-/**
- * The in-memory module that names the request and response type of every route.
- */
 export function renderEntry(
   entryFile: string,
   appRoot: string,

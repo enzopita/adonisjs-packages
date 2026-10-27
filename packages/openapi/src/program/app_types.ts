@@ -30,9 +30,6 @@ export interface AppTypes {
   exceptions: ExceptionResponses
   errors: ConfiguredErrors
   validationError?: ts.Type
-  /**
-   * What reading the tags of an action needs besides the action.
-   */
   tags: Omit<TagContext, 'method' | 'problems'>
   locate: (node: ts.Node) => SourceLocation
   routeTypes: (routeName: string) => { request?: ts.Type; response?: ts.Type }

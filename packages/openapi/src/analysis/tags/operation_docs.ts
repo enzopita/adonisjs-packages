@@ -16,9 +16,6 @@ export interface OperationMeta {
 
 export interface OperationDocs {
   meta: OperationMeta
-  /**
-   * The classes `@throws {SmsRejectedException}` tags name, which carry the status and the body.
-   */
   throws: ThrowsTag[]
   /**
    * `@response {404} reason` describes a status something else documents, and
@@ -26,9 +23,6 @@ export interface OperationDocs {
    */
   responses: ResponseTag[]
   requestBody?: ts.Type
-  /**
-   * Why a tag could not be documented.
-   */
   problems: Diagnostic[]
 }
 

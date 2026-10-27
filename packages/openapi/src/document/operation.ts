@@ -13,13 +13,7 @@ import { parametersFor } from './parameters.ts'
 export interface OperationParts {
   meta: OperationMeta
   requestBody?: ts.Type
-  /**
-   * The input type of the route, merged with its validator's JSON Schema.
-   */
   input?: JsonSchema
-  /**
-   * The part of the input that is the request body.
-   */
   fields?: JsonSchema
   responses: Record<string, OpenApiResponse>
   security: Record<string, string[]>[]

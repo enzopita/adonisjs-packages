@@ -28,12 +28,13 @@ export async function generateDocument(
 
   const paths: OpenApiDocument['paths'] = {}
   const provenance: GeneratedDocument['provenance'] = {}
-  const checked = new Set<string>()
   const components = new ResponseComponents()
 
-  for (const route of routes) {
-    const { request, response } = types.routeTypes(route.name)
-    const input = request && mergeSchemas(vine.get(route.name), types.schemas.convert(request))
+  // A route with an optional param has a path without it too, which shares everything else.
+  for (const [name, variants] of Map.groupBy(routes, route => route.name)) {
+    const route = variants[0]!
+    const { request, response } = types.routeTypes(name)
+    const input = request && mergeSchemas(vine.get(name), types.schemas.convert(request))
     const fields = input && bodyFields(input)
     const controller = types.handler(route)
 
@@ -42,15 +43,14 @@ export async function generateDocument(
       : NO_DOCS
 
     diagnostics.push(
-      ...docs.problems.map((problem): Diagnostic => ({ ...problem, route: route.name })),
+      ...docs.problems.map((problem): Diagnostic => ({ ...problem, route: name })),
+      ...operationRules(
+        name,
+        docs.meta,
+        config,
+        controller && types.locate(controller.method.name),
+      ),
     )
-
-    // The paths of a route with an optional param share its docs, which are checked once.
-    if (!checked.has(route.name)) {
-      checked.add(route.name)
-      const location = controller && types.locate(controller.method.name)
-      diagnostics.push(...operationRules(route.name, docs.meta, config, location))
-    }
 
     const { secured, security } = securityFor(route, config.security.middleware)
 
@@ -59,20 +59,22 @@ export async function generateDocument(
       components,
     })
 
-    provenance[route.name] = sources
+    provenance[name] = sources
 
-    const methods = paths[route.path] ?? {}
-    paths[route.path] = methods
+    for (const variant of variants) {
+      const methods = paths[variant.path] ?? {}
+      paths[variant.path] = methods
 
-    for (const method of route.methods)
-      methods[method] = operationFor(route, method, types, {
-        meta: docs.meta,
-        requestBody: docs.requestBody,
-        input,
-        fields,
-        responses,
-        security,
-      })
+      for (const method of variant.methods)
+        methods[method] = operationFor(variant, method, types, {
+          meta: docs.meta,
+          requestBody: docs.requestBody,
+          input,
+          fields,
+          responses,
+          security,
+        })
+    }
   }
 
   diagnostics.push(...types.exceptions.diagnostics, ...types.errors.diagnostics)

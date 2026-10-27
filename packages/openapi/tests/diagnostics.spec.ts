@@ -111,7 +111,11 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
   })
 
   test('warns about a tag the generator does not read', ({ assert }) => {
-    assert.include(output, 'OA-T008 broken.misspelled: @reponse is not a tag the generator reads')
+    // The route has an optional param, so two paths, and the warning once.
+    assert.lengthOf(
+      output.split('OA-T008 broken.misspelled: @reponse is not a tag the generator reads'),
+      2,
+    )
     assert.include(
       output,
       'OA-T008 broken.annotated: @summary is not a tag the generator reads: the first paragraph of the comment is the summary',

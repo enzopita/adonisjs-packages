@@ -62,6 +62,23 @@
                         },
                         "message": {
                           "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "E_DISPOSABLE_EMAIL"
+                        },
+                        "message": {
+                          "type": "string"
                         },
                         "domain": {
                           "type": "string"
@@ -1417,6 +1434,50 @@
         }
       }
     },
+    "/api/v1/probe/managed": {
+      "get": {
+        "operationId": "probe.managed",
+        "tags": [
+          "Probe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "const": "E_AUTHORIZATION_FAILURE"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "code",
+                    "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/probe/viewed": {
       "get": {
         "operationId": "probe.probe.viewed",
@@ -2530,6 +2591,18 @@
         "required": [
           "code",
           "message"
+        ]
+      },
+      "ErrorCode": {
+        "type": "string",
+        "enum": [
+          "E_AUTHORIZATION_FAILURE",
+          "E_DISPOSABLE_EMAIL",
+          "E_EMAIL_NOT_VERIFIED",
+          "E_EMAIL_TAKEN",
+          "E_INVALID_TENANT_HEADER",
+          "E_TOO_MANY_REQUESTS",
+          "E_WRONG_SECRET"
         ]
       }
     },

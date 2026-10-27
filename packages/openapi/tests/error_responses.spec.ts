@@ -85,6 +85,15 @@ test.group('openapi:generate on the playground app: exceptions, middleware and t
         properties: {
           code: { type: 'string', const: 'E_DISPOSABLE_EMAIL' },
           message: { type: 'string' },
+        },
+        required: ['code', 'message'],
+        additionalProperties: false,
+      },
+      {
+        type: 'object',
+        properties: {
+          code: { type: 'string', const: 'E_DISPOSABLE_EMAIL' },
+          message: { type: 'string' },
           domain: { type: 'string' },
         },
         required: ['code', 'message', 'domain'],
@@ -138,6 +147,20 @@ test.group('openapi:generate on the playground app: exceptions, middleware and t
     assert.deepEqual(json(probe('gated').responses['403']), {
       oneOf: [authorizationFailure, emailNotVerified],
     })
+  })
+
+  test('lists every literal code the app sends in a shared ErrorCode schema', ({ assert }) => {
+    const { enum: codes = [] } = document.components.schemas.ErrorCode!
+
+    assert.deepEqual(
+      codes,
+      [...codes].sort((a, b) => String(a).localeCompare(String(b))),
+    )
+    assert.includeMembers(codes, [
+      'E_AUTHORIZATION_FAILURE',
+      'E_EMAIL_NOT_VERIFIED',
+      'E_EMAIL_TAKEN',
+    ])
   })
 
   test('describes a thrown status with @response without adding a body', ({ assert }) => {

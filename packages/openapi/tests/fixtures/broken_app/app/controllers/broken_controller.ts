@@ -61,6 +61,43 @@ export default class BrokenController {
     return { id: user.id }
   }
 
+  /**
+   * @throws EmailTakenException
+   */
+  async unbraced() {
+    return { ok: true }
+  }
+
+  /**
+   * @throws 404 Not found
+   */
+  async unbracedStatus() {
+    return { ok: true }
+  }
+
+  /**
+   * @response {502} {{ provider: string }} The provider did not answer
+   */
+  async inline() {
+    return { ok: true }
+  }
+
+  /**
+   * @response {502} {UpstreamFailure} The provider did not answer
+   */
+  async unresolved() {
+    return { ok: true }
+  }
+
+  /**
+   * @internal
+   * @todo split by tenant
+   * @summary Annotated
+   */
+  async annotated() {
+    return { ok: true }
+  }
+
   async ledger() {
     ledger.reject()
     return { ok: true }

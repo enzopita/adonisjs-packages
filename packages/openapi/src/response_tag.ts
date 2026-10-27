@@ -11,6 +11,25 @@ export interface ResponseTag {
 }
 
 /**
+ * The text inside the braces `text` starts with, which may hold braces of its own, and the text
+ * after them.
+ */
+function braced(text: string) {
+  if (!text.startsWith('{')) return undefined
+
+  let depth = 0
+
+  for (let index = 0; index < text.length; index++) {
+    if (text[index] === '{') depth++
+    else if (text[index] === '}') depth--
+
+    if (depth === 0) return { inner: text.slice(1, index), rest: text.slice(index + 1).trim() }
+  }
+
+  return undefined
+}
+
+/**
  * `@response {404} reason` or `@response {502} {UpstreamError} reason`.
  */
 export function responseTag(
@@ -20,8 +39,8 @@ export function responseTag(
   tag: ts.JSDocTag,
   problems: Problem[],
 ): ResponseTag | undefined {
-  const parsed = /^\{([^}]*)\}\s*(?:\{([^}]*)\}\s*)?([\s\S]*)$/.exec(tagText(tag))
-  const status = parsed?.[1]?.trim() ?? ''
+  const parsed = braced(tagText(tag))
+  const status = parsed?.inner.trim() ?? ''
   const code = /^[1-5]\d\d$/.test(status) ? status : undefined
 
   if (!parsed || !code) {
@@ -36,13 +55,29 @@ export function responseTag(
     return undefined
   }
 
-  const reason = reasonOf(parsed[3] ?? '')
+  const type = braced(parsed.rest)
+  const reason = reasonOf(type ? type.rest : parsed.rest)
 
-  if (parsed[2] === undefined) return { code, ...(reason && { reason }), tag }
+  if (!type) return { code, ...(reason && { reason }), tag }
 
-  const body = namedType(checker, resolveModule, method, tag, parsed[2], problems)
+  // A declared response whose type does not resolve would vanish from the document, so it fails generation.
+  const unresolved: Problem[] = []
 
-  return body && { code, body, ...(reason && { reason }), tag }
+  if (type.inner.trim().startsWith('{'))
+    unresolved.push({
+      code: 'OA-T007',
+      severity: 'error',
+      message: `@response {${code}} {${type.inner.trim()}}: an inline object type is not read`,
+      fix: `declare it as a type, such as \`type Body = ${type.inner.trim()}\`, and write \`@response {${code}} {Body}\``,
+      node: tag,
+    })
+
+  const body =
+    !unresolved.length && namedType(checker, resolveModule, method, tag, type.inner, unresolved)
+
+  problems.push(...unresolved.map(problem => ({ ...problem, severity: 'error' as const })))
+
+  return body ? { code, body, ...(reason && { reason }), tag } : undefined
 }
 
 /**

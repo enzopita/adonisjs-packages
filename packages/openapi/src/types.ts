@@ -179,13 +179,13 @@ export type ResponseSource = (
  * - `OA-R001`: a closure route, skipped.
  * - `OA-R002`: a handler whose return type is unknown.
  * - `OA-V001`: a validator whose JSON Schema cannot be read.
- * - `OA-T001`: a `@throws` that names a status code or a union instead of one class.
+ * - `OA-T001`: a `@throws` that names a status code or a union instead of one class, or a class without braces.
  * - `OA-T002`: a `@throws` class name that no exception class of the app has, or several have.
  * - `OA-T003`: a `@response {N} reason` whose status nothing documents.
  * - `OA-T004`: a `@response` status that is not a status code.
  * - `OA-T005`: a `@throws` type that does not resolve to a class.
  * - `OA-T006`: an exception with no status code.
- * - `OA-T007`: a `@requestBody` or `@response` type that does not resolve.
+ * - `OA-T007`: a `@requestBody` or `@response` type that does not resolve, an error for `@response`.
  * - `OA-T008`: a tag the generator does not read.
  * - `OA-E001`: an `errors` entry whose exception status cannot be read from its source.
  * - `OA-E002`: a package exception that renders its own body, which its declaration does not carry.

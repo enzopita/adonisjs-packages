@@ -11,6 +11,11 @@ export function defineConfig<const Errors extends ErrorsConfig = {}>(
     throw new Error('openapi: use either "routes.only" or "routes.except", not both')
   }
 
+  // A JavaScript config, or one typed loosely, would otherwise lose the option without a sign.
+  if ('errorResponse' in config) {
+    throw new Error('openapi: "errorResponse" is removed, set the error body type in "errors.body"')
+  }
+
   return {
     output: 'openapi.json',
     info: { title: 'API', version: '1.0.0' },

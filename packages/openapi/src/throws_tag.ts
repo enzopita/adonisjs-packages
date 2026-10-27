@@ -24,6 +24,10 @@ export type FindException = (name: string) => {
   names: string[]
 }
 
+function statusFix(code: string) {
+  return `use \`@response {${code}} reason\` to describe a derived status, \`@response {${code}} {Type}\` to declare a body, or \`@throws {Class}\``
+}
+
 export function reasonOf(text: string) {
   return text.replace(/\s*\n\s*/g, ' ').trim() || undefined
 }
@@ -61,7 +65,7 @@ function thrownClass(
       code: 'OA-T001',
       severity: 'error',
       message: `${message} names a status code, not an exception class`,
-      fix: `use \`@response {${code}} reason\` to describe a derived status, \`@response {${code}} {Type}\` to declare a body, or \`@throws {Class}\``,
+      fix: statusFix(code),
       node: type,
     })
 
@@ -135,6 +139,31 @@ function thrownClass(
   return undefined
 }
 
+/**
+ * `@throws EmailTakenException` or `@throws 404 Not found`, as a 0.x tag rewritten by hand may read:
+ * without braces, the type is only text.
+ */
+function unbraced(tag: ts.JSDocThrowsTag): Problem {
+  const [word = ''] = tagText(tag).split(/\s/)
+
+  if (/^[1-5]\d\d$/.test(word))
+    return {
+      code: 'OA-T001',
+      severity: 'error',
+      message: `@throws ${word} names a status code, not an exception class`,
+      fix: statusFix(word),
+      node: tag,
+    }
+
+  return {
+    code: 'OA-T001',
+    severity: 'error',
+    message: word ? `@throws ${word} has no braces around the class` : '@throws names no class',
+    fix: `write it as \`@throws {${word || 'Class'}} reason\``,
+    node: tag,
+  }
+}
+
 export function throwsTag(
   checker: ts.TypeChecker,
   resolveModule: ResolveModule,
@@ -142,9 +171,19 @@ export function throwsTag(
   tag: ts.JSDocThrowsTag,
   problems: Problem[],
 ): ThrowsTag | undefined {
-  const exception =
-    tag.typeExpression &&
-    thrownClass(checker, resolveModule, findException, tag.typeExpression.type, problems)
+  if (!tag.typeExpression) {
+    problems.push(unbraced(tag))
+
+    return undefined
+  }
+
+  const exception = thrownClass(
+    checker,
+    resolveModule,
+    findException,
+    tag.typeExpression.type,
+    problems,
+  )
 
   const reason = reasonOf(tagText(tag))
 

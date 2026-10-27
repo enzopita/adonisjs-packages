@@ -754,6 +754,17 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
     )
   })
 
+  test('rejects a @throws without braces with the fix', ({ assert }) => {
+    assert.include(
+      output,
+      'OA-T001 broken.unbraced: @throws EmailTakenException has no braces around the class: write it as `@throws {EmailTakenException} reason`',
+    )
+    assert.include(
+      output,
+      'OA-T001 broken.unbraced_status: @throws 404 names a status code, not an exception class: use `@response {404} reason`',
+    )
+  })
+
   test('lists the candidates of a @throws class name that resolves to none or several', ({
     assert,
   }) => {
@@ -772,8 +783,33 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
     assert.include(output, 'OA-T003 broken.underived: @response {418}: nothing documents a 418')
   })
 
+  test('rejects a @response type it cannot read', ({ assert }) => {
+    const errors = output.split('\n').filter(line => line.includes('[ error ]'))
+
+    assert.isTrue(
+      errors.some(line =>
+        line.includes(
+          'OA-T007 broken.inline: @response {502} {{ provider: string }}: an inline object type is not read: declare it as a type, such as `type Body = { provider: string }`, and write `@response {502} {Body}`',
+        ),
+      ),
+    )
+    assert.isTrue(
+      errors.some(line =>
+        line.includes(
+          'OA-T007 broken.unresolved: @response {UpstreamFailure}: UpstreamFailure is not in scope',
+        ),
+      ),
+    )
+  })
+
   test('warns about a tag the generator does not read', ({ assert }) => {
     assert.include(output, 'OA-T008 broken.misspelled: @reponse is not a tag the generator reads')
+    assert.include(
+      output,
+      'OA-T008 broken.annotated: @summary is not a tag the generator reads: the first paragraph of the comment is the summary',
+    )
+    assert.notInclude(output, 'OA-T008 broken.annotated: @internal')
+    assert.notInclude(output, 'OA-T008 broken.annotated: @todo')
   })
 
   test('warns that a package exception renders a body its declaration does not carry', ({
@@ -796,6 +832,18 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
     assert.include(
       output,
       "OA-E003 errors.middleware['#start/limiter'] matches no middleware of the documented routes: name the middleware as `node ace list:routes` shows it",
+    )
+  })
+})
+
+test.group('defineConfig', () => {
+  test('rejects the removed errorResponse option', async ({ assert }) => {
+    const { defineConfig } = await import('../src/define_config.ts')
+
+    assert.throws(
+      // SAFETY: a JavaScript config has no types to reject the removed option, which is what this checks.
+      () => defineConfig({ errorResponse: 'ApiError' } as never),
+      'openapi: "errorResponse" is removed, set the error body type in "errors.body"',
     )
   })
 })

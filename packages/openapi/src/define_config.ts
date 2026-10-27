@@ -1,8 +1,5 @@
 import type { ErrorsConfig, OpenApiConfig, OpenApiUserConfig } from './types.ts'
 
-const GROUPED_KEYS =
-  '{ output, document: { info, servers, tags }, routes, security: { schemes, middleware }, errors, strict, rules }'
-
 // Where each 0.x key went, so a config that still sets one fails with the fix.
 const MOVED = {
   info: 'document.info',
@@ -30,7 +27,7 @@ export function defineConfig<const Errors extends ErrorsConfig = {}>(
   if (moved.length) {
     const fixes = moved.map(([key, path]) => `"${key}" is now "${path}"`).join(', ')
 
-    throw new Error(`openapi: the config is grouped as ${GROUPED_KEYS}: ${fixes}`)
+    throw new Error(`openapi: the config groups its keys since 1.0: ${fixes}`)
   }
 
   const { document, security, ...rest } = config

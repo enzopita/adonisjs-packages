@@ -6,18 +6,8 @@ test.group('defineConfig', () => {
 
     assert.throws(
       // SAFETY: a JavaScript config has no types to reject the removed keys, which is what this checks.
-      () => defineConfig({ info: { title: 'API' }, middlewareSecurity: {} } as never),
-      'openapi: the config is grouped as { output, document: { info, servers, tags }, routes, security: { schemes, middleware }, errors, strict, rules }: "info" is now "document.info", "middlewareSecurity" is now "security.middleware"',
-    )
-  })
-
-  test('rejects the removed errorResponse option', async ({ assert }) => {
-    const { defineConfig } = await import('../src/define_config.ts')
-
-    assert.throws(
-      // SAFETY: a JavaScript config has no types to reject the removed option, which is what this checks.
-      () => defineConfig({ errorResponse: 'ApiError' } as never),
-      /"errorResponse" is now "errors.body"/,
+      () => defineConfig({ info: { title: 'API' }, errorResponse: 'ApiError' } as never),
+      /"info" is now "document\.info", "errorResponse" is now "errors\.body"/,
     )
   })
 

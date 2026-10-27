@@ -59,6 +59,7 @@ test.group('openapi:generate on the playground app: the document', group => {
       '/api/v1/probe/items/{id}',
       '/api/v1/probe/echo',
       '/api/v1/probe/paged',
+      '/api/v1/probe/nullable',
     ])
     assert.include(logs, 'OA-R001 probe.closure: closure handlers have no types to read')
     assert.notInclude(logs, 'openapi.ui')
@@ -70,7 +71,12 @@ test.group('openapi:generate on the playground app: the document', group => {
 
     assert.deepEqual(body.properties!.email, { type: 'string', format: 'email', maxLength: 254 })
     assert.deepEqual(body.properties!.password, { type: 'string', minLength: 8, maxLength: 32 })
-    assert.sameMembers(body.required ?? [], ['email', 'password', 'passwordConfirmation'])
+    assert.sameMembers(body.required ?? [], [
+      'fullName',
+      'email',
+      'password',
+      'passwordConfirmation',
+    ])
   })
 
   test('sends files as multipart binary', ({ assert }) => {

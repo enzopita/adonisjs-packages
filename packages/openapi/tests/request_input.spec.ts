@@ -22,4 +22,19 @@ test.group('openapi:generate on the playground app: the request input', group =>
       object({ query: object({ page: { type: 'number' } }) }),
     )
   })
+
+  test('requires a nullable field, which the body must send even as null', ({ assert }) => {
+    const nullable = document.paths['/api/v1/probe/nullable']!.post!
+
+    assert.deepEqual(nullable.requestBody!.content['application/json']!.schema, {
+      type: 'object',
+      properties: {
+        nickname: { type: ['string', 'null'] },
+        bio: { type: 'string' },
+        website: { type: ['string', 'null'] },
+      },
+      additionalProperties: false,
+      required: ['nickname'],
+    })
+  })
 })

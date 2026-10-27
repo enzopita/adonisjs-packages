@@ -30,7 +30,12 @@ export function mergeSchemas(vine: JsonSchema | undefined, typed: JsonSchema): J
     ]),
   )
 
-  return { ...vine, properties }
+  // Vine leaves a `.nullable()` field out of `required`, although it rejects a body without the key.
+  const required = Object.keys(properties).filter(
+    key => vine.required?.includes(key) || typed.required?.includes(key),
+  )
+
+  return { ...vine, properties, ...(required.length > 0 && { required }) }
 }
 
 /**

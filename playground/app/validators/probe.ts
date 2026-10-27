@@ -21,3 +21,9 @@ export const pagedProbeValidator = vine.create({
     page: vine.number(),
   }),
 })
+
+export const nullableProbeValidator = vine.create({
+  nickname: vine.string().nullable(),
+  bio: vine.string().optional(),
+  website: vine.string().nullable().optional(),
+})

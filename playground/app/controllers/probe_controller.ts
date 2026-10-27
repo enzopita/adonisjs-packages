@@ -8,7 +8,12 @@ import EmailTakenException from '#exceptions/email_taken_exception'
 import PlanLimitException from '#exceptions/plan_limit_exception'
 import MaintenanceException from '#exceptions/maintenance_exception'
 import SeatLimitException from '#exceptions/seat_limit_exception'
-import { echoProbeValidator, pagedProbeValidator, searchProbeValidator } from '#validators/probe'
+import {
+  echoProbeValidator,
+  nullableProbeValidator,
+  pagedProbeValidator,
+  searchProbeValidator,
+} from '#validators/probe'
 import type { HttpContext } from '@adonisjs/core/http'
 
 const manifest = fileURLToPath(new URL('../../package.json', import.meta.url))
@@ -196,6 +201,10 @@ export default class ProbeController {
 
   async paged({ request }: HttpContext) {
     return request.validateUsing(pagedProbeValidator)
+  }
+
+  async nullable({ request }: HttpContext) {
+    return request.validateUsing(nullableProbeValidator)
   }
 
   async head() {

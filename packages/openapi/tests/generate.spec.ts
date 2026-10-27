@@ -1,6 +1,6 @@
 import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
-import { generatePlayground, json, object } from './support/playground.ts'
+import { generatePlayground, inline, json, object } from './support/playground.ts'
 
 test.group('openapi:generate on the playground app: the document', group => {
   let document: OpenApiDocument
@@ -44,6 +44,7 @@ test.group('openapi:generate on the playground app: the document', group => {
       '/api/v1/probe/gated',
       '/api/v1/probe/reasoned',
       '/api/v1/probe/authorized',
+      '/api/v1/probe/screened',
       '/api/v1/probe/viewed',
       '/api/v1/probe/hidden',
       '/api/v1/probe/users/{id}',
@@ -106,10 +107,8 @@ test.group('openapi:generate on the playground app: the document', group => {
   })
 
   test('derives the response from the serialized transformer', ({ assert }) => {
-    const schema =
-      document.paths['/api/v1/account/profile']!.get!.responses['200']!.content![
-        'application/json'
-      ]!.schema
+    const schema = inline(document.paths['/api/v1/account/profile']!.get!.responses['200'])
+      .content!['application/json']!.schema
 
     assert.deepEqual(schema.properties!.data, { $ref: '#/components/schemas/User' })
     assert.containsSubset(document.components.schemas.User!.properties, {
@@ -177,7 +176,7 @@ test.group('openapi:generate on the playground app: the document', group => {
 
   test('names transformer data as components and references them', ({ assert }) => {
     const json = (path: string) =>
-      document.paths[path]!.get!.responses['200']!.content!['application/json']!.schema
+      inline(document.paths[path]!.get!.responses['200']).content!['application/json']!.schema
 
     assert.deepEqual(json('/api/v1/users/{id}').properties!.data, {
       $ref: '#/components/schemas/User',
@@ -191,8 +190,9 @@ test.group('openapi:generate on the playground app: the document', group => {
   test('names the validation error as a shared component', ({ assert }) => {
     assert.property(document.components.schemas, 'ValidationError')
     assert.deepEqual(
-      document.paths['/api/v1/auth/login']!.post!.responses['422']!.content!['application/json']!
-        .schema,
+      inline(document.paths['/api/v1/auth/login']!.post!.responses['422']).content![
+        'application/json'
+      ]!.schema,
       { $ref: '#/components/schemas/ValidationError' },
     )
   })

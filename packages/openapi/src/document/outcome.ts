@@ -1,5 +1,7 @@
 import { STATUS_CODES } from 'node:http'
+import type { ResponseOwner } from '../analysis/response_owner.ts'
 import type { JsonSchema, OpenApiResponse, ResponseSource } from '../types.ts'
+import type { ResponseComponents } from './response_components.ts'
 
 export interface Body {
   mediaType: string
@@ -21,22 +23,54 @@ interface Outcome {
    */
   optional: boolean
   sources: ResponseSource[]
+  /**
+   * The class each contribution comes from, if any.
+   */
+  owners: (ResponseOwner | undefined)[]
 }
 
 export interface Contribution {
   bodies?: Body[]
   reason?: string
   headers?: Iterable<string>
+  owner?: ResponseOwner
 }
 
 const EMPTY_STATUSES = new Set(['204', '205', '304'])
 
 /**
+ * The reasons the tags of the operation give replace the others. Else each contribution is
+ * described by the class it comes from, and the status text stands for the ones without a reason.
+ */
+function describe(code: string, { reasons, owners }: Outcome) {
+  const status = STATUS_CODES[Number(code)] ?? 'Response'
+
+  if (reasons.length) return reasons.join('; ')
+
+  const described = owners.flatMap(owner => owner?.reason ?? [])
+  const unexplained = described.length < owners.length ? [status] : []
+
+  return [...new Set([...described, ...unexplained])].join('; ')
+}
+
+/**
+ * The class every contribution comes from, when it describes the response, which makes the
+ * response shared.
+ */
+function sharedOwner({ reasons, owners }: Outcome) {
+  const [first] = owners
+
+  return !reasons.length && first?.reason && owners.every(owner => owner?.symbol === first.symbol)
+    ? first
+    : undefined
+}
+
+/**
  * Bodies with the same schema, such as two exceptions rendered by the same handler, appear once.
  */
-function render(code: string, { reasons, bodies, headers, optional }: Outcome): OpenApiResponse {
-  const status = STATUS_CODES[Number(code)] ?? 'Response'
-  const description = reasons.join('; ') || status
+function render(code: string, outcome: Outcome): OpenApiResponse {
+  const { bodies, headers, optional } = outcome
+  const description = describe(code, outcome)
 
   const response: OpenApiResponse = {
     description: optional ? `${description}, or no body` : description,
@@ -73,7 +107,14 @@ export class Outcomes {
     let found = this.#byCode.get(code)
 
     if (!found) {
-      found = { reasons: [], bodies: [], headers: new Set(), optional: false, sources: [] }
+      found = {
+        reasons: [],
+        bodies: [],
+        headers: new Set(),
+        optional: false,
+        sources: [],
+        owners: [],
+      }
       this.#byCode.set(code, found)
     }
 
@@ -91,11 +132,12 @@ export class Outcomes {
   add(
     code: string,
     source: ResponseSource | ResponseSource[],
-    { bodies = [], reason, headers = [] }: Contribution = {},
+    { bodies = [], reason, headers = [], owner }: Contribution = {},
   ) {
     const found = this.#outcome(code)
     found.sources.push(...[source].flat())
     found.bodies.push(...bodies)
+    found.owners.push(owner)
 
     for (const header of headers) found.headers.add(header)
 
@@ -106,11 +148,18 @@ export class Outcomes {
     this.#outcome(code).optional = true
   }
 
-  render() {
+  render(components: ResponseComponents) {
     const entries = [...this.#byCode]
 
+    const rendered = ([code, found]: [string, Outcome]) => {
+      const response = render(code, found)
+      const owner = sharedOwner(found)
+
+      return [code, owner ? components.ref(owner.name, code, response) : response] as const
+    }
+
     return {
-      responses: Object.fromEntries(entries.map(([code, found]) => [code, render(code, found)])),
+      responses: Object.fromEntries(entries.map(rendered)),
       sources: Object.fromEntries(entries.map(([code, found]) => [code, found.sources])),
     }
   }

@@ -40,10 +40,17 @@ export class MiddlewareResponses {
     this.#findInline = findInline
   }
 
-  #read(bodies: ts.Node[]) {
+  /**
+   * An answer of the middleware's own belongs to its class, `owner`, and a thrown one to the
+   * class of the exception.
+   */
+  #read(bodies: ts.Node[], owner?: ts.Symbol): Answer[] {
     const read = handlerResponses(this.#checker, bodies)
 
-    return [...read.answers, ...this.#exceptions.thrownAnswers(read.throws)]
+    return [
+      ...read.answers.map(answer => ({ ...answer, owner })),
+      ...this.#exceptions.thrownAnswers(read.throws),
+    ]
   }
 
   #answersOf(specifier: string) {
@@ -51,7 +58,9 @@ export class MiddlewareResponses {
 
     if (!found) {
       const instance = this.#instanceOf(specifier)
-      found = instance ? this.#read(methodBodies(this.#checker, instance, ['handle'])) : []
+      found = instance
+        ? this.#read(methodBodies(this.#checker, instance, ['handle']), instance.getSymbol())
+        : []
       this.#answers.set(specifier, found)
     }
 
@@ -77,8 +86,8 @@ export class MiddlewareResponses {
       })),
       ...inline,
     ].flatMap(({ middleware, answers }) =>
-      answers.flatMap(({ code, body, node }) =>
-        code === undefined ? [] : [{ code, body, middleware, location: this.#locate(node) }],
+      answers.flatMap(({ code, body, node, owner }) =>
+        code === undefined ? [] : [{ code, body, middleware, owner, location: this.#locate(node) }],
       ),
     )
 

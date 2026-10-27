@@ -5,7 +5,7 @@ import type { OperationDocs } from '../../analysis/tags/operation_docs.ts'
 import { unknownReturnType } from '../../diagnostics/route.ts'
 import type { AppTypes } from '../../program/app_types.ts'
 import type { ControllerHandler } from '../../routes/controller_handler.ts'
-import type { Diagnostic, RouteOperation } from '../../types.ts'
+import type { RouteOperation } from '../../types.ts'
 import { Outcomes } from '../outcome.ts'
 import type { ResponseContext } from './context.ts'
 import { fromThrown, fromThrowers, fromThrowsTags } from './from_exceptions.ts'
@@ -17,7 +17,7 @@ function contextFor(
   route: RouteOperation,
   app: AppTypes,
   controller: ControllerHandler | undefined,
-  diagnostics: Diagnostic[],
+  { diagnostics, components }: Pick<ResponseContext, 'diagnostics' | 'components'>,
 ): ResponseContext {
   const handler = controller
     ? handlerResponses(
@@ -36,6 +36,7 @@ function contextFor(
     // A body returned or sent without a status keeps the one `response.status(...)` set.
     plain: handler.status ?? '200',
     outcomes: new Outcomes(),
+    components,
     diagnostics,
   }
 }
@@ -51,9 +52,10 @@ export function responsesFor(
   response: ts.Type | undefined,
   docs: Pick<OperationDocs, 'throws' | 'responses'>,
   secured: string[],
-  diagnostics: Diagnostic[],
+  shared: Pick<ResponseContext, 'diagnostics' | 'components'>,
 ) {
-  const context = contextFor(route, app, controller, diagnostics)
+  const context = contextFor(route, app, controller, shared)
+  const { diagnostics } = shared
 
   fromReturnType(context, response)
   fromAnswers(context)
@@ -70,5 +72,5 @@ export function responsesFor(
     context.outcomes.add('200', context.returned)
   }
 
-  return context.outcomes.render()
+  return context.outcomes.render(context.components)
 }

@@ -173,6 +173,10 @@ export interface OpenApiResponse {
   content?: Record<string, { schema: JsonSchema }>
 }
 
+export interface OpenApiReference {
+  $ref: string
+}
+
 export interface OpenApiOperation {
   operationId: string
   summary?: string
@@ -181,7 +185,7 @@ export interface OpenApiOperation {
   deprecated?: true
   parameters?: OpenApiParameter[]
   requestBody?: { required: true; content: Record<string, { schema: JsonSchema }> }
-  responses: Record<string, OpenApiResponse>
+  responses: Record<string, OpenApiResponse | OpenApiReference>
   security?: Record<string, string[]>[]
 }
 
@@ -193,6 +197,7 @@ export interface OpenApiDocument {
   paths: Record<string, Partial<Record<HttpMethod, OpenApiOperation>>>
   components: {
     schemas: Record<string, JsonSchema>
+    responses?: Record<string, OpenApiResponse>
     securitySchemes: SecurityConfig['schemes']
   }
 }

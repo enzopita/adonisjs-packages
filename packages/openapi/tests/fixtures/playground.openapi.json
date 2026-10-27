@@ -45,28 +45,7 @@
             }
           },
           "409": {
-            "description": "Conflict",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string",
-                      "const": "E_EMAIL_TAKEN"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "required": [
-                    "code",
-                    "message"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/EmailTakenException"
           },
           "422": {
             "description": "Unprocessable Entity",
@@ -384,28 +363,7 @@
             }
           },
           "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string",
-                      "const": "E_INVALID_TENANT_HEADER"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "required": [
-                    "code",
-                    "message"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/TenantMiddleware"
           },
           "401": {
             "description": "Unauthorized",
@@ -486,28 +444,7 @@
             "description": "No Content"
           },
           "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string",
-                      "const": "E_INVALID_TENANT_HEADER"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "required": [
-                    "code",
-                    "message"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/TenantMiddleware"
           },
           "401": {
             "description": "Unauthorized",
@@ -1230,28 +1167,7 @@
             }
           },
           "403": {
-            "description": "Forbidden",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string",
-                      "const": "E_EMAIL_NOT_VERIFIED"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  },
-                  "additionalProperties": false,
-                  "required": [
-                    "code",
-                    "message"
-                  ]
-                }
-              }
-            }
+            "$ref": "#/components/responses/EmailNotVerifiedException"
           }
         }
       }
@@ -1419,6 +1335,80 @@
                   "required": [
                     "code",
                     "message"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/probe/screened": {
+      "get": {
+        "operationId": "probe.screened",
+        "tags": [
+          "Probe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "authorized": {
+                      "type": "boolean"
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "authorized"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The email address of the account is not verified; Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "E_AUTHORIZATION_FAILURE"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "const": "E_EMAIL_NOT_VERIFIED"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "code",
+                        "message"
+                      ]
+                    }
                   ]
                 }
               }
@@ -2457,6 +2447,80 @@
           "code",
           "message"
         ]
+      }
+    },
+    "responses": {
+      "EmailTakenException": {
+        "description": "Another account uses this email address",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "const": "E_EMAIL_TAKEN"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ]
+            }
+          }
+        }
+      },
+      "TenantMiddleware": {
+        "description": "The X-Tenant-Id header is missing",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "const": "E_INVALID_TENANT_HEADER"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ]
+            }
+          }
+        }
+      },
+      "EmailNotVerifiedException": {
+        "description": "The email address of the account is not verified",
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "string",
+                  "const": "E_EMAIL_NOT_VERIFIED"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "code",
+                "message"
+              ]
+            }
+          }
+        }
       }
     },
     "securitySchemes": {

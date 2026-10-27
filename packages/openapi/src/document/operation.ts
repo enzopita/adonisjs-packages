@@ -1,13 +1,7 @@
 import type ts from 'typescript'
 import type { OperationMeta } from '../analysis/tags/operation_docs.ts'
 import type { AppTypes } from '../program/app_types.ts'
-import type {
-  HttpMethod,
-  JsonSchema,
-  OpenApiOperation,
-  OpenApiResponse,
-  RouteOperation,
-} from '../types.ts'
+import type { HttpMethod, JsonSchema, OpenApiOperation, RouteOperation } from '../types.ts'
 import { parametersFor } from './parameters.ts'
 
 export interface OperationParts {
@@ -15,7 +9,7 @@ export interface OperationParts {
   requestBody?: ts.Type
   input?: JsonSchema
   fields?: JsonSchema
-  responses: Record<string, OpenApiResponse>
+  responses: OpenApiOperation['responses']
   security: Record<string, string[]>[]
 }
 

@@ -1,3 +1,4 @@
+import { responseOwner } from '../../analysis/response_owner.ts'
 import { jsonBody, type ResponseContext } from './context.ts'
 
 /**
@@ -14,11 +15,11 @@ export function fromValidator(context: ResponseContext) {
 export function fromMiddleware(context: ResponseContext) {
   const { app, route, outcomes } = context
 
-  for (const { code, body, middleware, location } of app.middlewareResponses(route))
+  for (const { code, body, middleware, location, owner } of app.middlewareResponses(route))
     outcomes.add(
       code,
       { kind: 'middleware', middleware, ...(location && { location }) },
-      { bodies: body ? [jsonBody(context, body)] : [] },
+      { bodies: body ? [jsonBody(context, body)] : [], owner: responseOwner(owner) },
     )
 }
 

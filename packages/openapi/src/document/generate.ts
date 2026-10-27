@@ -8,6 +8,7 @@ import { collectRoutes } from '../routes/collect_routes.ts'
 import type { Diagnostic, OpenApiConfig, OpenApiDocument, ResponseSource } from '../types.ts'
 import { operationFor } from './operation.ts'
 import { operationRules } from './operation_rules.ts'
+import { ResponseComponents } from './response_components.ts'
 import { responsesFor } from './responses/responses.ts'
 import { securityFor } from './security.ts'
 import { bodyFields, mergeSchemas, validatorSchemas } from './validator_schemas.ts'
@@ -37,6 +38,7 @@ export async function generateDocument(
   const paths: OpenApiDocument['paths'] = {}
   const provenance: GeneratedDocument['provenance'] = {}
   const checked = new Set<string>()
+  const components = new ResponseComponents()
 
   for (const route of routes) {
     const { request, response } = types.routeTypes(route.name)
@@ -61,15 +63,10 @@ export async function generateDocument(
 
     const { secured, security } = securityFor(route, config.security.middleware)
 
-    const { responses, sources } = responsesFor(
-      route,
-      types,
-      controller,
-      response,
-      docs,
-      secured,
+    const { responses, sources } = responsesFor(route, types, controller, response, docs, secured, {
       diagnostics,
-    )
+      components,
+    })
 
     provenance[route.name] = sources
 
@@ -97,7 +94,11 @@ export async function generateDocument(
     openapi: '3.1.0',
     info: config.document.info,
     paths,
-    components: { schemas: types.schemas.components, securitySchemes: config.security.schemes },
+    components: {
+      schemas: types.schemas.components,
+      ...(Object.keys(components.responses).length > 0 && { responses: components.responses }),
+      securitySchemes: config.security.schemes,
+    },
   }
 
   if (config.document.servers.length) document.servers = config.document.servers

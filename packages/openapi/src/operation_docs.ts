@@ -4,6 +4,14 @@ import { unknownTag } from './known_tags.ts'
 import { fileType } from './media_type.ts'
 import { responseTag, type ResponseTag } from './response_tag.ts'
 import { throwsTag, type FindException, type ThrowsTag } from './throws_tag.ts'
+import { methodBodies, responseCalls, type ResponseCalls } from './analysis/response_calls.ts'
+import {
+  aliased,
+  importedSymbol,
+  property,
+  statusOf,
+  type ResolveModule,
+} from './analysis/symbols.ts'
 import type { DiagnosticCode } from './types.ts'
 
 export interface OperationDocs {
@@ -38,12 +46,6 @@ export interface Problem {
   node: ts.Node
 }
 
-/**
- * The symbol of the module a specifier such as `#exceptions/user_disabled_exception` names,
- * resolved from the file that refers to it.
- */
-export type ResolveModule = (specifier: string, from: ts.SourceFile) => ts.Symbol | undefined
-
 function jsDoc(node: ts.Node) {
   return ts.getJSDocCommentsAndTags(node).filter(ts.isJSDoc).at(-1)
 }
@@ -65,130 +67,6 @@ function tagsOf(doc: ts.JSDoc | undefined) {
 }
 
 export type Thrown = { code: string; bodies: ts.Type[] }
-
-export function statusOf(type: ts.Type | undefined) {
-  return type?.isNumberLiteral() && type.value >= 100 && type.value <= 599
-    ? String(type.value)
-    : undefined
-}
-
-export function aliased(checker: ts.TypeChecker, symbol: ts.Symbol) {
-  return symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol
-}
-
-/**
- * The export `names` walks to, such as `default` or `E_ROW_NOT_FOUND`, in a module a JSDoc
- * `import('...')` names. The checker leaves those types unbound in a `.ts` file, so the module
- * is resolved by hand.
- */
-export function importedSymbol(
-  checker: ts.TypeChecker,
-  resolveModule: ResolveModule,
-  specifier: string,
-  names: string[],
-  from: ts.SourceFile,
-) {
-  return names.reduce<ts.Symbol | undefined>(
-    (symbol, name) => symbol && checker.tryGetMemberInModuleExports(name, aliased(checker, symbol)),
-    resolveModule(specifier, from),
-  )
-}
-
-export function qualifiedNames(name: ts.EntityName): string[] {
-  return ts.isIdentifier(name) ? [name.text] : [...qualifiedNames(name.left), name.right.text]
-}
-
-function property(checker: ts.TypeChecker, type: ts.Type, name: string) {
-  const symbol = checker.getPropertyOfType(type, name)
-
-  return symbol && checker.getTypeOfSymbol(symbol)
-}
-
-export interface ResponseCalls {
-  calls: { name: string; call: ts.CallExpression }[]
-  throws: ts.NewExpression[]
-  /**
-   * Every other call, which an `errors.throwers` key can name.
-   */
-  invoked: ts.CallExpression[]
-}
-
-/**
- * The calls `roots` make on an `HttpResponse` and the exceptions they `throw new`, also inside the
- * functions of the app they call, such as a shared `renderError(ctx, error)`. Functions from
- * packages are not followed, and neither are the nodes in `skip`.
- */
-export function responseCalls(
-  checker: ts.TypeChecker,
-  roots: ts.Node[],
-  skip = new Set<ts.Node>(),
-): ResponseCalls {
-  const found: ResponseCalls = { calls: [], throws: [], invoked: [] }
-  const visited = new Set<ts.Node>(roots)
-
-  const visit = (node: ts.Node) => {
-    if (skip.has(node)) return
-
-    if (ts.isThrowStatement(node) && node.expression && ts.isNewExpression(node.expression))
-      found.throws.push(node.expression)
-
-    if (ts.isCallExpression(node)) {
-      const callee = node.expression
-
-      const receiver =
-        ts.isPropertyAccessExpression(callee) && checker.getTypeAtLocation(callee.expression)
-
-      if (receiver && receiver.getSymbol()?.name === 'HttpResponse')
-        found.calls.push({ name: callee.name.text, call: node })
-      else {
-        found.invoked.push(node)
-        follow(checker.getResolvedSignature(node)?.declaration)
-      }
-    }
-
-    ts.forEachChild(node, visit)
-  }
-
-  const follow = (declaration: ts.Declaration | undefined) => {
-    const body = declaration && bodyOf(declaration)
-
-    if (!body || visited.has(body)) return
-
-    visited.add(body)
-    visit(body)
-  }
-
-  for (const root of roots) visit(root)
-
-  return found
-}
-
-/**
- * The body of a function or method of the app. Package code is not read.
- */
-export function bodyOf(declaration: ts.Declaration) {
-  const body =
-    ts.isFunctionDeclaration(declaration) ||
-    ts.isMethodDeclaration(declaration) ||
-    ts.isFunctionExpression(declaration) ||
-    ts.isArrowFunction(declaration)
-      ? declaration.body
-      : undefined
-
-  const file = declaration.getSourceFile()
-
-  return body && !file.isDeclarationFile && !file.fileName.includes('/node_modules/')
-    ? body
-    : undefined
-}
-
-export function methodBodies(checker: ts.TypeChecker, instance: ts.Type, methods: string[]) {
-  return methods.flatMap(method => {
-    const declaration = checker.getPropertyOfType(instance, method)?.valueDeclaration
-
-    return declaration ? (bodyOf(declaration) ?? []) : []
-  })
-}
 
 /**
  * What an exception answers with by itself: a helper such as `response.conflict(body)` in its

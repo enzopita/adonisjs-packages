@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 import type { ApplicationService } from '@adonisjs/core/types'
 import type { Router } from '@adonisjs/core/http'
+import { property } from './analysis/symbols.ts'
 import { collectRoutes } from './collect_routes.ts'
 import type { OperationDocs } from './operation_docs.ts'
 import { applicable, underivedResponse } from './response_tag.ts'
@@ -230,8 +231,8 @@ function responsesFor(
   let returnsPlain = false
 
   for (const member of members) {
-    const status = types.property(member, '__status')
-    const payload = types.property(member, '__response')
+    const status = property(types.checker, member, '__status')
+    const payload = property(types.checker, member, '__response')
 
     if (payload) {
       let code = plain

@@ -1,13 +1,7 @@
 import ts from 'typescript'
 import { exceptionType, type ExceptionType } from './exception_class.ts'
-import {
-  aliased,
-  importedSymbol,
-  qualifiedNames,
-  tagText,
-  type Problem,
-  type ResolveModule,
-} from './operation_docs.ts'
+import { aliased, importedSymbol, qualifiedNames, type ResolveModule } from './analysis/symbols.ts'
+import { tagText, type Problem } from './operation_docs.ts'
 import type { Diagnostic, SourceLocation } from './types.ts'
 
 export interface ThrowsTag {

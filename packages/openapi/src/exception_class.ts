@@ -1,5 +1,6 @@
 import ts from 'typescript'
-import { aliased, bodyOf } from './operation_docs.ts'
+import { bodyOf } from './analysis/response_calls.ts'
+import { aliased } from './analysis/symbols.ts'
 
 /**
  * A class the app throws: its name in the code, and the symbol the code names it with, such as a

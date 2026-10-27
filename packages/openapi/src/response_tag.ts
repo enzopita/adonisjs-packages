@@ -1,5 +1,6 @@
 import ts from 'typescript'
-import { namedType, tagText, type Problem, type ResolveModule } from './operation_docs.ts'
+import type { ResolveModule } from './analysis/symbols.ts'
+import { namedType, tagText, type Problem } from './operation_docs.ts'
 import { reasonOf } from './throws_tag.ts'
 import type { Diagnostic, SourceLocation } from './types.ts'
 

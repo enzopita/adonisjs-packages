@@ -13,6 +13,7 @@ import {
   type HandlerResponses,
   type OperationDocs,
 } from './operation_docs.ts'
+import { defaultExport, isAppSource, property } from './analysis/symbols.ts'
 import type { FindException } from './throws_tag.ts'
 import { TypeToSchema } from './type_to_schema.ts'
 import { unauthorizedException } from './unauthorized.ts'
@@ -222,7 +223,10 @@ export class RouteTypes {
 
     const type = this.checker.getTypeAtLocation(member)
 
-    return { request: this.property(type, 'request'), response: this.property(type, 'response') }
+    return {
+      request: property(this.checker, type, 'request'),
+      response: property(this.checker, type, 'response'),
+    }
   }
 
   validationError() {
@@ -250,15 +254,9 @@ export class RouteTypes {
     const module = this.#resolveModule(specifier, this.#kernelFile)
     const file = module?.valueDeclaration?.getSourceFile()
 
-    if (!module || !file || file.isDeclarationFile || file.fileName.includes('/node_modules/'))
-      return undefined
+    if (!module || !file || !isAppSource(file)) return undefined
 
-    const exported = this.checker.tryGetMemberInModuleExports('default', module)
-
-    const symbol =
-      exported && exported.flags & ts.SymbolFlags.Alias
-        ? this.checker.getAliasedSymbol(exported)
-        : exported
+    const symbol = defaultExport(this.checker, module)
 
     return symbol && symbol.flags & ts.SymbolFlags.Class
       ? this.checker.getDeclaredTypeOfSymbol(symbol)
@@ -324,13 +322,7 @@ export class RouteTypes {
   #handler({ controller }: RouteOperation) {
     const file = controller && this.#program.getSourceFile(controller.path)
     const module = file && this.checker.getSymbolAtLocation(file)
-    const exported = module && this.checker.tryGetMemberInModuleExports('default', module)
-
-    const symbol =
-      exported && exported.flags & ts.SymbolFlags.Alias
-        ? this.checker.getAliasedSymbol(exported)
-        : exported
-
+    const symbol = module && defaultExport(this.checker, module)
     const declaration = symbol?.declarations?.find(ts.isClassDeclaration)
 
     const method = declaration?.members.find(
@@ -381,12 +373,6 @@ export class RouteTypes {
    */
   unauthorizedResponses() {
     return this.#unauthorized ? this.exceptions.responses(this.#unauthorized, '401') : []
-  }
-
-  property(type: ts.Type, name: string) {
-    const symbol = this.checker.getPropertyOfType(type, name)
-
-    return symbol && this.checker.getTypeOfSymbol(symbol)
   }
 }
 

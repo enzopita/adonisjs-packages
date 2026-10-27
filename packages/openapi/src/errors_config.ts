@@ -3,6 +3,7 @@ import { exceptionType } from './exception_class.ts'
 import { declaredStatus } from './exception_status.ts'
 import type { ExceptionResponses } from './exception_responses.ts'
 import type { Thrown } from './operation_docs.ts'
+import { property } from './analysis/symbols.ts'
 import { callMatches } from './throwers.ts'
 import type { Diagnostic, ErrorsConfig, ResponseSource, SourceLocation } from './types.ts'
 
@@ -50,18 +51,12 @@ export class ConfiguredErrors {
     this.#location = location
   }
 
-  #property(type: ts.Type | undefined, name: string) {
-    const symbol = type && this.#checker.getPropertyOfType(type, name)
-
-    return symbol && this.#checker.getTypeOfSymbol(symbol)
-  }
-
   #entriesOf(kind: Kind) {
     const cached = this.#entries.get(kind)
 
     if (cached) return cached
 
-    const types = this.#property(this.#property(this.#config, 'errors'), kind)
+    const types = property(this.#checker, property(this.#checker, this.#config, 'errors'), kind)
 
     const entries = Object.entries(this.#errors[kind] ?? {}).map(
       ([key, value]): ConfiguredException => {

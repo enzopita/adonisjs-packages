@@ -345,11 +345,37 @@ When `.adonisjs/client/data.d.ts` exists, every type in its `Data` namespace bec
 - A body with a `vine.file()` field is sent as `multipart/form-data`.
 - When VineJS cannot describe a field (a file, a custom rule), the generator uses the field's TypeScript type.
 - `Date` and Luxon `DateTime` values become `{ type: 'string', format: 'date-time' }`.
-- A handler that returns a model or an untyped object produces a `200` response with no schema and a warning. Return `serialize(...)` to type it.
+- A handler with an untyped return produces a `200` response with no schema and a warning. Return `serialize(...)` to type it. A Lucid model returned directly is converted as its class, with internal properties such as `$attributes` and hidden columns such as `password`, so always return it through a transformer.
 
 ## Limitations
 
-- A status code set with `response.status(201)` is not detected, because the return type does not carry it. Return a helper such as `response.created(body)` instead.
-- A thrown exception has no return type either. Add a `@throws` tag for each status code it can produce, such as the `404` of `findOrFail()`, or for each exception class it throws.
-- A nested transformer is matched to its named schema by shape. Two transformers with the same output share the first schema name.
-- Every type in `Data` is written to `components.schemas`, even if no route returns it.
+Known cases where the document differs from what the app sends. They are tracked in [#19](https://github.com/enzopita/adonisjs-packages/issues/19); until fixed, document them with `@throws` or avoid the pattern.
+
+Responses:
+
+- Branches of a handler that return the same status code document only the last one: `return serialize(a)` and `return { b }` both answer `200`, and only `{ b }` is kept.
+- `return null` is documented as `200` with `{ type: 'null' }`; the app answers `204` with no body. A `| undefined` return documents the body as always present.
+- `response.redirect(...)` is documented as `200` with no body; the app answers `302` with a `Location` header.
+- `response.stream()`, `download()` and `attachment()` are documented as `200` with no body.
+- A returned string is documented as `application/json`; the app sends `text/plain`, or whatever `content-type` the handler sets.
+- `response.json(body)` is documented as a `200`, but it keeps the status set before it, such as `response.status(201)`.
+- `response.send(body)` or a helper called without `return` is not read: the return type is `void`.
+- A handler that only returns error helpers, such as `return response.tooManyRequests(body)`, also gets a `200` and a warning.
+- Response headers, such as `Retry-After`, `Location` or `Content-Disposition`, are not documented.
+- `response.abort(body, status)` and `abortIf`/`abortUnless` in a handler are not read. A bouncer `authorize()` 403 is not read either.
+- A middleware that throws an exception, such as a two-factor middleware throwing `TwoFactorRequiredException`, does not document it: only response helpers and `send()` in its `handle()` are read. Use `@throws` on the routes.
+- The `401` of a secured route gets the handler's `Error` body, but `E_UNAUTHORIZED_ACCESS` from `@adonisjs/auth` renders its own `{ errors: [{ message }] }` through its `handle()`.
+
+Schemas:
+
+- `Map` and `Set` become objects with `size`; they serialize as `{}`. `bigint` becomes `integer`; it serializes as a string.
+- A property typed `undefined`, as TypeScript adds when normalizing a union, is emitted as `{ not: {} }`.
+- The paginator `metadata` fields are typed `string` by Lucid's `SimplePaginatorMetaKeys`, so they are documented as strings; the app sends numbers and `null`.
+
+Parameters and paths:
+
+- An object in a `GET` validator becomes a query parameter with the default `form` style; the app reads it as `filter[status]=x`, which needs `style: deepObject`.
+- An array in a `GET` validator rejects a single value (`?tags=a`) with a `422`; send the key twice.
+- An optional path parameter, `/users/:id?`, documents only `/users/{id}`, with `id` required.
+- A route with `GET` and `POST` is documented as one input: both get the body, and the `GET` has no query parameters.
+- A `HEAD`-only route leaves an empty path item.

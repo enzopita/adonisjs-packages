@@ -69,6 +69,11 @@ export interface OpenApiConfig {
   routes: { only?: RouteMatcher[]; except?: RouteMatcher[] }
   security: SecurityConfig
   errors: ErrorsConfig
+  /**
+   * Makes every warning an error, so `openapi:generate` and `openapi:check` fail on it. The
+   * `--strict` and `--no-strict` flags of both commands override it.
+   */
+  strict: boolean
 }
 
 /**

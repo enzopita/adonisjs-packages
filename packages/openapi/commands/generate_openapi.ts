@@ -61,7 +61,7 @@ export default class GenerateOpenApi extends OpenApiCommand {
 
     if (this.explain) return this.#explain(this.explain, provenance)
 
-    if (failed) return
+    if (failed) return this.logger.error('The errors above block the document')
 
     const appRoot = fileURLToPath(this.app.appRoot)
     const output = resolve(appRoot, config.output)

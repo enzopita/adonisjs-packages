@@ -95,5 +95,11 @@ export async function generateDocument(
 
   if (config.document.tags.length) document.tags = config.document.tags
 
-  return { document, diagnostics, provenance }
+  return {
+    document,
+    diagnostics: config.strict
+      ? diagnostics.map(diagnostic => ({ ...diagnostic, severity: 'error' as const }))
+      : diagnostics,
+    provenance,
+  }
 }

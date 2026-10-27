@@ -1,7 +1,7 @@
 import type { ErrorsConfig, OpenApiConfig, OpenApiUserConfig } from './types.ts'
 
 const GROUPED_KEYS =
-  '{ output, document: { info, servers, tags }, routes, security: { schemes, middleware }, errors }'
+  '{ output, document: { info, servers, tags }, routes, security: { schemes, middleware }, errors, strict }'
 
 // Where each 0.x key went, so a config that still sets one fails with the fix.
 const MOVED = {
@@ -38,6 +38,7 @@ export function defineConfig<const Errors extends ErrorsConfig = {}>(
   return {
     output: 'openapi.json',
     routes: {},
+    strict: false,
     // SAFETY: `Errors` defaults to `{}`, the only value a config without `errors` can have.
     errors: {} as Errors,
     ...rest,

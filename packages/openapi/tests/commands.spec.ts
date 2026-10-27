@@ -20,6 +20,24 @@ test.group('node ace build', () => {
   })
 })
 
+test.group('openapi:generate --strict', () => {
+  test('writes no document when the app has a warning', async ({ assert }) => {
+    const committed = new URL('openapi.json', playground)
+    await writeFile(committed, '{}')
+
+    const error = await run('node', ['ace', 'openapi:generate', '--strict'], {
+      cwd: playground,
+    }).then(
+      () => undefined,
+      (failure: { stdout: string; stderr: string }) => failure,
+    )
+
+    assert.exists(error)
+    assert.include(`${error!.stdout}${error!.stderr}`, 'The errors above block the document')
+    assert.equal(await readFile(committed, 'utf8'), '{}')
+  })
+})
+
 test.group('openapi:generate --explain', () => {
   test('prints where each response of a route comes from', async ({ assert }) => {
     const { stdout } = await run(
@@ -81,6 +99,33 @@ test.group('openapi:check', group => {
     const { stdout } = await run('node', ['ace', 'openapi:check'], { cwd: playground })
 
     assert.include(stdout, 'openapi.json is up to date')
+  })
+
+  test('fails on the warnings of the playground with --strict only', async ({ assert }) => {
+    const { stdout } = await run('node', ['ace', 'openapi:check'], { cwd: playground })
+
+    const error = await run('node', ['ace', 'openapi:check', '--strict'], {
+      cwd: playground,
+    }).then(
+      () => undefined,
+      (failure: { stdout: string; stderr: string }) => failure,
+    )
+
+    assert.include(stdout, 'OA-R001 probe.closure')
+    assert.exists(error)
+    assert.include(`${error!.stdout}${error!.stderr}`, '[ error ] OA-R001 probe.closure')
+    assert.include(`${error!.stdout}${error!.stderr}`, 'The errors above fail the check')
+  })
+
+  test('writes no file', async ({ assert }) => {
+    const before = await readFile(committed, 'utf8')
+    const document: OpenApiDocument = JSON.parse(before)
+    document.info.version = '0.0.0'
+    await writeFile(committed, JSON.stringify(document))
+
+    await run('node', ['ace', 'openapi:check'], { cwd: playground }).catch(() => undefined)
+
+    assert.equal(await readFile(committed, 'utf8'), JSON.stringify(document))
   })
 
   test('fails and names what differs when the document is out of date', async ({ assert }) => {

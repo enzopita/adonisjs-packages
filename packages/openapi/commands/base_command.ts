@@ -1,4 +1,4 @@
-import { BaseCommand } from '@adonisjs/core/ace'
+import { BaseCommand, flags } from '@adonisjs/core/ace'
 import { defineConfig } from '../src/define_config.ts'
 import type { Diagnostic, OpenApiConfig } from '../src/types.ts'
 
@@ -7,6 +7,12 @@ import type { Diagnostic, OpenApiConfig } from '../src/types.ts'
  * environment, but never ready, so no long-running side effect starts.
  */
 export abstract class OpenApiCommand extends BaseCommand {
+  @flags.boolean({
+    description: 'Fail on warnings too. Overrides "strict" in config/openapi.ts',
+    showNegatedVariantInHelp: true,
+  })
+  declare strict?: boolean
+
   protected async generate() {
     this.app.setEnvironment('web')
     this.app.setMode('warmup')
@@ -16,7 +22,8 @@ export abstract class OpenApiCommand extends BaseCommand {
     const router = await this.app.container.make('router')
     router.commit()
 
-    const config = this.app.config.get<OpenApiConfig | undefined>('openapi') ?? defineConfig()
+    const configured = this.app.config.get<OpenApiConfig | undefined>('openapi') ?? defineConfig()
+    const config = { ...configured, strict: this.strict ?? configured.strict }
 
     // Loaded on run: it pulls in the TypeScript compiler, which every other ace command would pay for.
     const { generateDocument } = await import('../src/document/generate.ts')
@@ -26,10 +33,7 @@ export abstract class OpenApiCommand extends BaseCommand {
 
     const failed = generated.diagnostics.some(({ severity }) => severity === 'error')
 
-    if (failed) {
-      this.logger.error('The errors above block the document')
-      this.exitCode = 1
-    }
+    if (failed) this.exitCode = 1
 
     return { ...generated, config, failed }
   }

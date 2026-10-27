@@ -63,19 +63,3 @@ export function responseTag(context: TagContext, tag: ts.JSDocTag): ResponseTag 
 
   return body ? { code, body, ...(reason && { reason }), tag } : undefined
 }
-
-/**
- * The tags to document, a declared body first so a reason alone can describe the status it
- * declares, and the reasons for a status nothing documents.
- */
-export function applicable(tags: ResponseTag[], documented: (code: string) => boolean) {
-  const declared = tags.filter(({ body }) => body)
-  const codes = new Set(declared.map(({ code }) => code))
-  const described = tags.filter(({ body }) => !body)
-  const derived = ({ code }: ResponseTag) => documented(code) || codes.has(code)
-
-  return {
-    apply: [...declared, ...described.filter(derived)],
-    underived: described.filter(tag => !derived(tag)),
-  }
-}

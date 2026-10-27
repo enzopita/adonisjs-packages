@@ -23,6 +23,6 @@ Also in 1.0:
 
 - `strict` and the `--strict` and `--no-strict` flags make every warning an error. `rules.summaryMaxLength` and `rules.summaryTrailingPeriod` check summaries (`OA-S003`, `OA-S004`).
 - `openapi:check` reports diagnostics as well as drift, and writes no file, so a git hook can run it.
-- A function passed to a route's `.use()` is read like a named middleware (#32).
+- A function passed to a route's `.use()` is read like a named middleware (#32). `OA-R003` reports one the app's sources do not have, such as a method, and `OA-R004` one several functions of the app have.
 - `openapi:generate --explain=<route>` prints where each response comes from.
 - `download()` and `attachment()` get the media type of a literal file extension (#20).

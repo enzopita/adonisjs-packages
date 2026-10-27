@@ -4,7 +4,9 @@ import type { ConfiguredErrors } from '../analysis/errors/configured_errors.ts'
 import type { ExceptionResponses } from '../analysis/exceptions/exception_responses.ts'
 import { handlerResponses } from '../analysis/handler_responses.ts'
 import { methodBodies } from '../analysis/response_calls.ts'
-import type { SourceLocation } from '../types.ts'
+import { ambiguousInlineMiddleware, unmatchedInlineMiddleware } from '../diagnostics/route.ts'
+import type { Diagnostic, SourceLocation } from '../types.ts'
+import type { InlineMatch } from './inline_middleware.ts'
 import type { RouteOperation } from './route_operation.ts'
 import type { Kernel } from './kernel.ts'
 
@@ -20,7 +22,7 @@ export class MiddlewareResponses {
   #exceptions: ExceptionResponses
   #errors: ConfiguredErrors
   #locate: (node: ts.Node) => SourceLocation
-  #findInline: (source: string) => ts.FunctionLikeDeclaration | undefined
+  #findInline: (source: string) => InlineMatch
   #answers = new Map<string, Answer[]>()
 
   constructor(
@@ -30,7 +32,7 @@ export class MiddlewareResponses {
     exceptions: ExceptionResponses,
     errors: ConfiguredErrors,
     locate: (node: ts.Node) => SourceLocation,
-    findInline: (source: string) => ts.FunctionLikeDeclaration | undefined,
+    findInline: (source: string) => InlineMatch,
   ) {
     this.#checker = checker
     this.#kernel = kernel
@@ -68,16 +70,30 @@ export class MiddlewareResponses {
     return found
   }
 
+  /**
+   * The answers of the route's middleware, and a diagnostic for each function passed to `.use()`
+   * whose answers cannot be read.
+   */
   of(route: RouteOperation) {
     const specifiers = [
       ...this.#kernel.global,
       ...route.middleware.flatMap(name => this.#kernel.named.get(name) ?? []),
     ]
 
-    const inline = route.inlineMiddleware.flatMap(({ name, source }) => {
-      const body = this.#findInline(source)?.body
+    const diagnostics: Diagnostic[] = []
 
-      return body ? [{ middleware: name, answers: this.#read([body]) }] : []
+    const inline = route.inlineMiddleware.flatMap(({ name, source }) => {
+      const match = this.#findInline(source)
+
+      if (match.kind === 'found') return [{ middleware: name, answers: this.#read([match.body]) }]
+
+      diagnostics.push(
+        match.kind === 'missing'
+          ? unmatchedInlineMiddleware(route.name, name)
+          : ambiguousInlineMiddleware(route.name, name, match.candidates.map(this.#locate)),
+      )
+
+      return []
     })
 
     const read = [
@@ -92,9 +108,12 @@ export class MiddlewareResponses {
       ),
     )
 
-    return [
-      ...read,
-      ...this.#errors.middlewareResponses(new Set([...specifiers, ...route.middleware])),
-    ]
+    return {
+      responses: [
+        ...read,
+        ...this.#errors.middlewareResponses(new Set([...specifiers, ...route.middleware])),
+      ],
+      diagnostics,
+    }
   }
 }

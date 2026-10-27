@@ -57,7 +57,11 @@ export default class GenerateOpenApi extends OpenApiCommand {
 
   async run() {
     const startTime = process.hrtime()
-    const { document, provenance, config, failed } = await this.generate()
+
+    // Explaining writes nothing, so a warning has nothing to block.
+    const { document, provenance, config, failed } = await this.generate(
+      this.explain ? { strict: false } : {},
+    )
 
     if (this.explain) return this.#explain(this.explain, provenance)
 

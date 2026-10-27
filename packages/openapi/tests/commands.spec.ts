@@ -89,6 +89,16 @@ test.group('openapi:generate --explain', () => {
     assert.include(stdout, 'the auth middleware secures the route')
   })
 
+  test('does not fail on a warning with --strict, as it writes no file', async ({ assert }) => {
+    const { stdout } = await run(
+      'node',
+      ['ace', 'openapi:generate', '--explain=probe.secret', '--strict'],
+      { cwd: playground },
+    )
+
+    assert.include(stdout, '[ warn ] OA-R001 probe.closure')
+  })
+
   test('fails on an unknown route', async ({ assert }) => {
     await assert.rejects(() =>
       run('node', ['ace', 'openapi:generate', '--explain=nope'], { cwd: playground }),

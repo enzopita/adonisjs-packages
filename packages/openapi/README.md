@@ -34,7 +34,7 @@ The command boots the app the way `node ace codegen` does, so no database connec
 
 The command prints a [diagnostic](#diagnostics) for each problem it finds. A diagnostic starts with a stable code, such as `OA-R002`, and names the route and the source line when it has one. An `error` diagnostic, such as a `@throws {404}`, fails the command, and no file is written. A `warning` does not, unless the config sets `strict: true` or you pass `--strict`. `--no-strict` turns a `strict` config off for one run.
 
-To see where each response of a route comes from, pass the route name to `--explain`. The command prints the sources and writes no file:
+To see where each response of a route comes from, pass the route name to `--explain`. The command prints the sources and writes no file, so a warning does not fail it, even with `strict`:
 
 ```sh
 node ace openapi:generate --explain=users.users.show
@@ -47,7 +47,7 @@ node ace openapi:generate --explain=users.users.show
 #   the validator rejects the input
 ```
 
-`generateDocument(app, router, config)` returns the same result to code, such as a test of the app: `document`, `diagnostics` (`code`, `severity`, `route`, `message`, `fix`, `location`) and `provenance`, the sources `--explain` prints.
+`generateDocument(app, router, config)` returns the same result to code, such as a test of the app: `document`, `diagnostics` (`code`, `severity`, `route`, `message`, `fix`, `location`) and `provenance`, the sources `--explain` prints. It ignores `strict`: each diagnostic keeps its own severity, and the caller decides what fails.
 
 ### Check the committed document
 

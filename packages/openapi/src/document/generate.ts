@@ -102,9 +102,7 @@ export async function generateDocument(
 
   return {
     document,
-    diagnostics: config.strict
-      ? diagnostics.map(diagnostic => ({ ...diagnostic, severity: 'error' as const }))
-      : diagnostics,
+    diagnostics,
     provenance,
   }
 }

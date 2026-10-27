@@ -13,7 +13,10 @@ export abstract class OpenApiCommand extends BaseCommand {
   })
   declare strict?: boolean
 
-  protected async generate() {
+  /**
+   * `strict` makes every warning an error here only: `generateDocument()` keeps the severity of each.
+   */
+  protected async generate(options: { strict?: boolean } = {}) {
     this.app.setEnvironment('web')
     this.app.setMode('warmup')
     await this.app.boot()
@@ -22,20 +25,24 @@ export abstract class OpenApiCommand extends BaseCommand {
     const router = await this.app.container.make('router')
     router.commit()
 
-    const configured = this.app.config.get<OpenApiConfig | undefined>('openapi') ?? defineConfig()
-    const config = { ...configured, strict: this.strict ?? configured.strict }
+    const config = this.app.config.get<OpenApiConfig | undefined>('openapi') ?? defineConfig()
 
     // Loaded on run: it pulls in the TypeScript compiler, which every other ace command would pay for.
     const { generateDocument } = await import('../src/document/generate.ts')
     const generated = await generateDocument(this.app, router, config)
+    const strict = options.strict ?? this.strict ?? config.strict
 
-    for (const diagnostic of generated.diagnostics) this.#report(diagnostic)
+    const diagnostics = strict
+      ? generated.diagnostics.map(diagnostic => ({ ...diagnostic, severity: 'error' as const }))
+      : generated.diagnostics
 
-    const failed = generated.diagnostics.some(({ severity }) => severity === 'error')
+    for (const diagnostic of diagnostics) this.#report(diagnostic)
+
+    const failed = diagnostics.some(({ severity }) => severity === 'error')
 
     if (failed) this.exitCode = 1
 
-    return { ...generated, config, failed }
+    return { ...generated, diagnostics, config, failed }
   }
 
   #report({ code, severity, route, message, fix, location }: Diagnostic) {

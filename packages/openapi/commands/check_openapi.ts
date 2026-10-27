@@ -38,65 +38,78 @@ function differences(
   )
 }
 
+/**
+ * How the committed document compares with the one the app generates.
+ */
+type Comparison =
+  | { kind: 'missing' }
+  | { kind: 'current' }
+  | { kind: 'unreadable' }
+  | { kind: 'formatting' }
+  | { kind: 'differs'; pointers: string[] }
+
 export default class CheckOpenApi extends OpenApiCommand {
   static commandName = 'openapi:check'
   static description =
     'Fail on diagnostics, or when the committed OpenAPI document differs from the one the app generates. Writes no file'
 
-  /**
-   * The JSON Pointers where the committed file differs from `generated`, empty when it is up to
-   * date, or undefined when there is no file.
-   */
-  async #changes(output: string, generated: string) {
+  async #compare(output: string, generated: string): Promise<Comparison> {
     let committed: string
 
     try {
       committed = await readFile(output, 'utf8')
     } catch {
-      return undefined
+      return { kind: 'missing' }
     }
 
-    if (committed === generated) return []
+    if (committed === generated) return { kind: 'current' }
+
+    let before: Json
 
     try {
-      const before: Json = JSON.parse(committed)
-      const after: Json = JSON.parse(generated)
-      const changed = differences(before, after)
-
-      // Same content in another formatting, such as a file a formatter rewrote.
-      return changed.length ? changed : ['the formatting']
+      before = JSON.parse(committed)
     } catch {
-      return ['/']
+      return { kind: 'unreadable' }
     }
+
+    const pointers = differences(before, JSON.parse(generated))
+
+    // Same content in another formatting, such as a file a formatter rewrote.
+    return pointers.length ? { kind: 'differs', pointers } : { kind: 'formatting' }
   }
 
   async run() {
     const { document, config, failed } = await this.generate()
     const output = resolve(fileURLToPath(this.app.appRoot), config.output)
-    const changed = await this.#changes(output, `${JSON.stringify(document, null, 2)}\n`)
+    const comparison = await this.#compare(output, `${JSON.stringify(document, null, 2)}\n`)
+    const regenerate = 'run node ace openapi:generate'
 
     if (failed) this.logger.error('The errors above fail the check')
 
-    if (!changed) {
-      this.logger.error(`${config.output} does not exist: run node ace openapi:generate`)
-      this.exitCode = 1
+    switch (comparison.kind) {
+      case 'current':
+        if (!failed) this.logger.success(`${config.output} is up to date`)
 
-      return
+        return
+      case 'missing':
+        this.logger.error(`${config.output} does not exist: ${regenerate}`)
+        break
+      case 'unreadable':
+        this.logger.error(`${config.output} is not valid JSON: ${regenerate}`)
+        break
+      case 'formatting':
+        this.logger.error(`${config.output} differs in its formatting only: ${regenerate}`)
+        break
+      case 'differs': {
+        const { pointers } = comparison
+
+        this.logger.error(`${config.output} is out of date: ${regenerate}. It differs at:`)
+
+        for (const pointer of pointers.slice(0, SHOWN)) this.logger.log(`  ${pointer}`)
+
+        if (pointers.length > SHOWN) this.logger.log(`  and ${pointers.length - SHOWN} more`)
+      }
     }
-
-    if (!changed.length) {
-      if (!failed) this.logger.success(`${config.output} is up to date`)
-
-      return
-    }
-
-    this.logger.error(
-      `${config.output} is out of date: run node ace openapi:generate. It differs at:`,
-    )
-
-    for (const pointer of changed.slice(0, SHOWN)) this.logger.log(`  ${pointer}`)
-
-    if (changed.length > SHOWN) this.logger.log(`  and ${changed.length - SHOWN} more`)
 
     this.exitCode = 1
   }

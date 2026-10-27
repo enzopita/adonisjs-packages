@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
@@ -151,6 +151,33 @@ test.group('openapi:check', group => {
     await run('node', ['ace', 'openapi:check'], { cwd: dir }).catch(() => undefined)
 
     assert.equal(await readFile(committed, 'utf8'), JSON.stringify(document))
+  })
+
+  test('fails on a missing, unreadable or reformatted document', async ({ assert }) => {
+    const document = await readFile(committed, 'utf8')
+
+    const check = async () => {
+      const failure = await run('node', ['ace', 'openapi:check'], { cwd: dir }).then(
+        () => undefined,
+        (error: { stdout: string; stderr: string }) => `${error.stdout}${error.stderr}`,
+      )
+
+      assert.exists(failure)
+
+      return failure!
+    }
+
+    await rm(committed)
+    assert.include(await check(), 'openapi.json does not exist: run node ace openapi:generate')
+
+    await writeFile(committed, '{')
+    assert.include(await check(), 'openapi.json is not valid JSON: run node ace openapi:generate')
+
+    await writeFile(committed, JSON.stringify(JSON.parse(document)))
+    assert.include(
+      await check(),
+      'openapi.json differs in its formatting only: run node ace openapi:generate',
+    )
   })
 
   test('fails and names what differs when the document is out of date', async ({ assert }) => {

@@ -2,17 +2,17 @@
 
 Generate an OpenAPI 3.1 document from an AdonisJS 7 app, with no annotations. The generator reads the same sources as [Tuyau](https://github.com/Julien-R44/tuyau):
 
-| OpenAPI                             | Source                                                                                              |
-| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Paths and operations                | Named routes from the router                                                                        |
-| Request body, query and path params | The VineJS validator passed to `request.validateUsing()` (formats, bounds and enums included)       |
-| Responses                           | The return type of the controller method, such as `serialize(UserTransformer.transform(user))`      |
-| Status codes                        | Response helpers such as `response.created()`, the exceptions the action throws, and its middleware |
-| `summary`, `description`, `tags`    | The doc comment on the controller method and its class                                              |
-| Response descriptions               | The doc comment on the middleware or exception class a response comes from, or a tag on the action  |
-| Named schemas                       | The transformer types `node ace codegen` writes to `.adonisjs/client/data.d.ts`                     |
-| `422` response                      | Added to every route that validates its input                                                       |
-| `401` response and `security`       | Named middleware on the route, mapped in the config                                                 |
+| OpenAPI                             | Source                                                                                                 |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Paths and operations                | Named routes from the router                                                                           |
+| Request body, query and path params | The VineJS validator passed to `request.validateUsing()` (formats, bounds and enums included)          |
+| Responses                           | The return type of the controller method, such as `serialize(UserTransformer.transform(user))`         |
+| Status codes                        | Response helpers such as `response.created()`, the exceptions the action throws, and its middleware    |
+| `summary`, `description`, `tags`    | The doc comment on the controller method and its class                                                 |
+| Response descriptions               | The doc comment on the middleware or exception class a response comes from, or a doc tag on the action |
+| Named schemas                       | The transformer types `node ace codegen` writes to `.adonisjs/client/data.d.ts`                        |
+| `422` response                      | Added to every route that validates its input                                                          |
+| `401` response and `security`       | Named middleware on the route, mapped in the config                                                    |
 
 Controllers, validators and transformers import nothing from this package. Everything it reads is code an AdonisJS app already has, or a doc comment.
 
@@ -74,9 +74,11 @@ Before a push, [lefthook](https://lefthook.dev) can run it when the push touches
 pre-push:
   commands:
     openapi:
-      glob: '{app/**,start/**,config/openapi.ts}'
+      glob: '{app/**,start/**,config/openapi.ts,adonisrc.ts,package.json,openapi.json}'
       run: node ace openapi:check --strict
 ```
+
+The glob lists the sources of the document, `adonisrc.ts` for the named schemas, `package.json` for package upgrades, and the committed document itself, so a hand edit to it is checked too. Replace `openapi.json` with your `output`, and add your lockfile to the glob.
 
 When the hook fails, run `node ace openapi:generate`, commit `output`, and push again.
 
@@ -128,7 +130,7 @@ Every key is optional. `defineConfig()` throws when the config sets a 0.x key, s
 | `output`              | `'openapi.json'`                     | The document file, relative to the app root or absolute. `openapi:generate` writes it, `openapi:check` and `openapiRoutes({ source: 'file' })` read it, and the build hook ships it. |
 | `document.info`       | `{ title: 'API', version: '1.0.0' }` | The OpenAPI Info Object: `title` and `version`, and optionally `summary`, `description`, `termsOfService`, `contact` and `license`.                                                  |
 | `document.servers`    | `[]`                                 | The document's `servers`.                                                                                                                                                            |
-| `document.tags`       | `[]`                                 | The document's top-level `tags`, which describe and order the tags operations use. A tag an operation uses must be declared here, or it gets `OA-S002`.                              |
+| `document.tags`       | `[]`                                 | The document's top-level `tags`, which describe and order the OpenAPI tags of the operations. An OpenAPI tag an operation uses must be declared here, or it gets `OA-S002`.          |
 | `routes`              | `{}`                                 | `only` or `except`, with the same matchers as Tuyau's `generateRegistry()`: a substring, a regular expression, or a function of the route name.                                      |
 | `security.schemes`    | `{}`                                 | The document's `components.securitySchemes`.                                                                                                                                         |
 | `security.middleware` | `{}`                                 | Maps a named middleware, such as `middleware.auth()`, to a key of `security.schemes`. See [Security](#security).                                                                     |
@@ -182,26 +184,26 @@ export default class UsersController {
 
 The first paragraph is the `summary`. The next paragraphs and `@remarks` are the `description`.
 
-Each tag has one meaning:
+A doc tag is an `@` line of the doc comment, such as `@response {404} User not found`. The generator reads six doc tags, and each form of a doc tag has one meaning. `@response` has two forms, told apart by what follows the status code: a reason alone describes a response the generator documents, and a `{Type}` declares a response with that body.
 
-| Tag                               | Meaning                                                                                                                                                                          |
+| Doc tag form                      | Meaning                                                                                                                                                                          |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@tags Users, Admin`              | The operation's tags. On the class, they apply to every method. A method's own `@tags` replaces the class tags.                                                                  |
+| `@tags Users, Admin`              | The operation's OpenAPI tags, which group operations in a docs page. On the class, they apply to every method. A method's own `@tags` replaces the class tags.                   |
 | `@response {404} reason`          | Describes a status the generator already documents, such as the `404` of `findOrFail()`. It never adds a body. When nothing documents that status, generation fails (`OA-T003`). |
 | `@response {502} {Type} [reason]` | Declares a status and its body that nothing can derive, such as an upstream error the handler relays.                                                                            |
-| `@throws {Class} [reason]`        | Adds the status and the body of an exception class. See [Exception responses](#exception-responses).                                                                             |
+| `@throws {Class} [reason]`        | Adds the status and the body of an exception class, which the reason describes for this operation. See [Exception responses](#exception-responses).                              |
 | `@requestBody {Type}`             | The request body schema, for a handler that reads the body without a validator, such as a webhook. It replaces the body the validator would document.                            |
 | `@deprecated`                     | Marks the operation as deprecated.                                                                                                                                               |
 | `@remarks`                        | Adds a paragraph to the `description`.                                                                                                                                           |
 
-Prefer what the generator derives over a tag. An exception the action throws with `throw new`, a call `errors.throwers` names, and a middleware of the route document their status without a tag. Use `@response {N} reason` to describe such a status for one action, and describe it once on its class for every action, see [Describe a response once](#describe-a-response-once). Use `@throws {Class}` for an exception that the generator cannot see thrown, and `@response {N} {Type}` only when no class exists, such as a body the handler relays from another service.
+Prefer what the generator derives over a doc tag. An exception the action throws with `throw new`, a call `errors.throwers` names, and a middleware of the route document their status without a doc tag. Use `@response {N} reason` to describe such a status for one action, and describe it once on its class for every action, see [Describe a response once](#describe-a-response-once). Use `@throws {Class}` for an exception that the generator cannot see thrown, and `@response {N} {Type}` only when no class exists, such as a body the handler relays from another service.
 
 - A `{Type}` is a name in scope in the controller file, or `{import('#types/api').UpstreamError}`. A type that does not resolve fails generation with `OA-T007`, and so does an inline object type such as `{{ provider: string }}`: declare it as a type and name it.
 - `@throws {Class}` takes one class. A class in scope in the controller file is used as is. Any other is found by name among the classes extending `Exception` in the app's `app/**/exceptions/` folders, so it needs no import. A name that two classes share, or that none has, fails generation with `OA-T002`. `{import('#exceptions/user_disabled_exception').default}` names a class by its module, and works for any export: `import('#exceptions/errors').E_LOCKED`.
 - `@throws {404}`, `@throws {A | B}` and a tag without braces, such as `@throws EmailTakenException`, fail generation with `OA-T001`, which names the fix.
-- The reason of a tag replaces the description for that operation. When several tags document one status code, their reasons are joined with `; `.
-- An operation without `@tags` has no tags and gets `OA-S001`.
-- A tag the generator does not read, such as a misspelled `@reponse`, gets `OA-T008`. Standard tags for the readers of the code are ignored without one: `@param`, `@returns`, `@return`, `@see`, `@example`, `@since`, `@internal`, `@todo`, `@override`, `@inheritDoc`, `@author`, `@version`, `@alpha`, `@beta`, `@experimental`, `@public`, `@private` and `@protected`. `@summary`, `@description` and `@exception` get the warning, with where their content goes instead.
+- The reason of a doc tag replaces the description for that operation. When several doc tags document one status code, their reasons are joined with `; `.
+- An operation without `@tags` has no OpenAPI tags and gets `OA-S001`.
+- A doc tag the generator does not read, such as a misspelled `@reponse`, gets `OA-T008`. Standard doc tags for the readers of the code are ignored without one: `@param`, `@returns`, `@return`, `@see`, `@example`, `@since`, `@internal`, `@todo`, `@override`, `@inheritDoc`, `@author`, `@version`, `@alpha`, `@beta`, `@experimental`, `@public`, `@private` and `@protected`. `@summary`, `@description` and `@exception` get the warning, with where their content goes instead.
 
 ## Describe a response once
 
@@ -350,10 +352,7 @@ A response comes from each status code the handler can answer with. Branches tha
 - `response.redirect(...)` is a `302`, or the status passed to it, with a `Location` header.
 - `response.abort(body, 403)`, `abortIf()` and `abortUnless()` add their status with that body, or `400` without a status.
 - `204`, `205` and `304` responses, and helpers called without a body, have no `content`.
-- An exception the handler throws, with `throw new` or through a call `errors.throwers` names, adds the status of its class. A `@throws {Class}` tag does the same.
-- `@response {N} {Type}` adds its status code, and `@response {N} reason` describes one that is already there.
-- Routes that validate their input get a `422`. Routes behind a middleware mapped in `security.middleware` get a `401`.
-- A middleware of the route that answers with a status adds it. See [Middleware responses](#middleware-responses).
+- The exceptions the handler throws, its middleware, `@throws` and `@response {N} {Type}`, its validator (`422`) and its security middleware (`401`) add statuses too. See [Exception responses](#exception-responses), [Middleware responses](#middleware-responses), [Document an operation](#document-an-operation) and [Security](#security).
 - A handler with no typed answer gets a `200` with no schema and a warning. A handler that only answers with errors, such as `return response.tooManyRequests(body)`, gets no `200`.
 
 ## Media types and headers
@@ -401,12 +400,12 @@ Codes keep their meaning across releases. An `error` fails `openapi:generate` an
 | `OA-T005` | warning                                           | A `@throws` type that is not a class, or does not resolve.                                                                        | Import the class, or name it as `import('...').Export`.                                                                                         |
 | `OA-T006` | warning                                           | A `@throws` class with no status code.                                                                                            | Give it a literal `static status`, or answer with a helper such as `response.conflict(body)` in its `handle()`.                                 |
 | `OA-T007` | error for `@response`, warning for `@requestBody` | A type that does not resolve, or an inline object type.                                                                           | Declare it as a named type in scope, or name it as `import('...').Type`.                                                                        |
-| `OA-T008` | warning                                           | A tag the generator does not read, such as `@reponse`.                                                                            | Use `@throws`, `@response`, `@requestBody`, `@tags`, `@deprecated` or `@remarks`.                                                               |
+| `OA-T008` | warning                                           | A doc tag the generator does not read, such as `@reponse`.                                                                        | Use `@throws`, `@response`, `@requestBody`, `@tags`, `@deprecated` or `@remarks`.                                                               |
 | `OA-E001` | warning                                           | An `errors` entry whose exception status cannot be read from its source. The entry is ignored.                                    | Name a class with a numeric `status` field or `static status`.                                                                                  |
 | `OA-E002` | warning                                           | A package exception that renders its own body, which its declaration does not carry. It is documented without one.                | Render it in an `instanceof` branch of the exception handler's `handle()`.                                                                      |
 | `OA-E003` | warning                                           | An `errors.throwers` or `errors.middleware` key that matches nothing in the documented routes.                                    | Fix the key. See [Errors config](#errors-config).                                                                                               |
-| `OA-S001` | warning                                           | An operation without tags.                                                                                                        | Add `@tags` to the action or its controller class.                                                                                              |
-| `OA-S002` | warning                                           | A tag that `document.tags` does not declare.                                                                                      | Declare it in `document.tags`.                                                                                                                  |
+| `OA-S001` | warning                                           | An operation without OpenAPI tags.                                                                                                | Add `@tags` to the action or its controller class.                                                                                              |
+| `OA-S002` | warning                                           | An OpenAPI tag that `document.tags` does not declare.                                                                             | Declare it in `document.tags`.                                                                                                                  |
 | `OA-S003` | warning                                           | A summary longer than `rules.summaryMaxLength`.                                                                                   | Shorten the first paragraph of the comment.                                                                                                     |
 | `OA-S004` | warning                                           | A summary whose final period breaks `rules.summaryTrailingPeriod`.                                                                | Add or remove the period.                                                                                                                       |
 | `OA-J001` | warning                                           | A type with no JSON Schema, emitted as `{}`.                                                                                      | Return a plain data type.                                                                                                                       |
@@ -465,7 +464,7 @@ To remove the page, delete the call. No other file of the app imports `@enzopita
 | `ui`        | `'scalar'`                                 | `'scalar'`, `'swagger-ui'`, `'redoc'`, or a function that returns the page HTML.                                                                 |
 | `uiOptions` | `{}`                                       | Passed as JSON to the UI's init call: `Scalar.createApiReference()`, `SwaggerUIBundle()` or Redoc's `init()`.                                    |
 | `cdn`       | jsDelivr, see below                        | `{ script }` for Scalar and Redoc, `{ script, style }` for Swagger UI. Replaces the default URLs, for example to serve the files from `public/`. |
-| `title`     | `info.title` from the config               | The page `<title>`.                                                                                                                              |
+| `title`     | `document.info.title` from the config      | The page `<title>`.                                                                                                                              |
 | `source`    | `'file'` in production, `'live'` otherwise | `'live'` generates the document on each request. `'file'` serves the file `node ace openapi:generate` wrote.                                     |
 | `transform` | none                                       | `(document, ctx) => document`, applied to each response. It receives a copy, so it can edit the document in place.                               |
 
@@ -555,7 +554,11 @@ Shield applies one policy to every route, so these directives apply to the whole
 
 ## Migrating from 0.x
 
-1.0 gives each tag one meaning and takes every body from a class. Most of the work is rewriting tags by hand, and the generator tells you which ones. Do the steps in order, and run `node ace openapi:generate` after each one.
+1.0 gives each doc tag form one meaning and takes every body from a class. Most of the work is rewriting doc tags by hand, and the generator tells you which ones. Do the steps in order:
+
+- Until step 1 is done, `defineConfig()` throws, so no ace command runs.
+- From step 2 on, run `node ace openapi:generate` after each step and read its diagnostics. It writes no file while a diagnostic is an error: a numeric `@throws` until step 2, and a `@response {N} reason` whose status nothing derives until step 4.
+- Until step 6 is done, each run also prints `OA-S001` for each operation without OpenAPI tags. To read the other diagnostics first, filter them out: `node ace openapi:generate 2>&1 | grep -v OA-S001`.
 
 ### 1. Group the config
 
@@ -570,9 +573,19 @@ Shield applies one policy to every route, so these directives apply to the whole
 | `middlewareSecurity` | `security.middleware` |
 | `errorResponse`      | `errors.body`         |
 
-`openapi:generate --output` and the `file` option of `openapiRoutes()` are removed. Set `output` in the config instead. The build hook now copies `output` into the build, so you can remove the `openapi.json` entry that `node ace add` put in the `metaFiles` of `adonisrc.ts`.
+`openapi:generate --output` and the `file` option of `openapiRoutes()` are removed. Set `output` in the config instead. The build hook now copies `output` into the build, so the `openapi.json` entry that `node ace add` put in the `metaFiles` of `adonisrc.ts` is no longer needed. Leaving it is harmless.
 
-### 2. Name what packages throw
+### 2. Rewrite the `@throws` doc tags that fail generation
+
+Generation stops on each of these with `OA-T001`, and the message names the file and line:
+
+- Replace every `@throws {N} reason` with `@response {N} reason`, with the same reason.
+- Split `@throws {A | B} reason` into one `@throws` per class.
+- Add the braces to a `@throws` without them: `@throws {EmailTakenException}`.
+
+Then generate. Each `@response {N} reason` whose status nothing derives yet gets `OA-T003`. The next two steps resolve them.
+
+### 3. Name what packages throw
 
 List the package calls your actions make that throw, and add each to `errors.throwers`. Add each package middleware that throws, such as a limiter throttle, to `errors.middleware`:
 
@@ -598,41 +611,42 @@ errors: {
 
 A key that matches no call gets `OA-E003`, so a misspelled key shows up at once.
 
-### 3. Rewrite each `@throws {N}`
+### 4. Resolve the remaining `OA-T003`
 
-Generation now stops on every numeric `@throws` with `OA-T001`, and the message names the file and line. Rewrite each one in two passes:
+A `@response {N} reason` still reported with `OA-T003` describes a status that nothing derives. Decide each one:
 
-1. Replace every `@throws {N} reason` with `@response {N} reason`, with the same reason, and generate.
-2. The tags left with `OA-T003` describe a status that nothing derives. Decide each one:
-   - The status comes from a package call: add the call to `errors.throwers`, and keep the tag.
-   - The status comes from an exception class the action throws where the generator cannot see it: write `@throws {Class}`.
-   - No class exists, such as a `413` the bodyparser throws as a plain `Exception`: declare the body with `@response {413} {RequestEntityTooLarge}`, and declare that type in the controller.
+- The status comes from an exception class the action throws where the generator cannot see it: write `@throws {Class}`.
+- No class exists, such as a `413` the bodyparser throws as a plain `Exception`: declare the body with `@response {413} {RequestEntityTooLarge}`, and declare that type in the controller.
 
-Then rewrite the class tags:
+You can also replace `@throws {import('#exceptions/x').default}` with the class name, unless two classes share the name (`OA-T002`).
 
-- Split `@throws {A | B} reason` into one `@throws` per class.
-- Replace `@throws {import('#exceptions/x').default}` with the class name, unless two classes share the name (`OA-T002`).
+To check that the `@response {N} reason` doc tags only describe, delete them all and generate again. The document keeps the same statuses and bodies, and only descriptions change.
 
-To check that the tags only describe, delete every `@response {N} reason` and generate again. The document keeps the same statuses and bodies, and only descriptions change.
-
-### 4. Move repeated reasons to their class
+### 5. Move repeated reasons to their class
 
 A reason copied into many actions, such as the `400` of a tenant middleware, belongs to the middleware or exception class it comes from. Write it once as the first paragraph of the class's doc comment, and delete the copies. See [Describe a response once](#describe-a-response-once). Keep a reason on the action only when it says something specific to that action.
 
-### 5. Tag every operation
+### 6. Tag every operation
 
-An operation no longer gets a tag from its route name. Add `@tags` to each controller class, or to each action, and declare every tag in `document.tags`. `OA-S001` lists the untagged operations, and `OA-S002` the undeclared tags.
+An operation no longer gets an OpenAPI tag from its route name. Add `@tags` to each controller class, or to each action, and declare every OpenAPI tag in `document.tags`. `OA-S001` lists the operations without one, and `OA-S002` the undeclared ones.
 
-### 6. Check what clients see
+### 7. Update the code that calls the generator
+
+Skip this step if no code of yours imports from the package:
+
+- `generateDocument()` returns `{ document, diagnostics, provenance }` instead of a list of warning strings. Each diagnostic has `code`, `severity`, `route`, `message`, `fix` and `location`, and keeps its own severity: `strict` only applies in the commands.
+- `@enzopita/adonisjs-openapi/types` exports only public types. `RouteOperation` is gone. `GeneratedDocument` and `OpenApiUserConfig` are new, and `OpenApiOperation.tags` is optional.
+
+### 8. Check what clients see
 
 Regenerate the document and review its diff before you regenerate clients from it:
 
-- A `.nullable()` field is now in `required`. A client that left it out gets a `422`, as it did before, and its types now say so.
+- A `.nullable()` field is now in `required`.
 - A validator field named `query` is now a body field, not a set of query parameters.
 - Each `findOrFail()` in an action or a function it calls adds a `404` through the thrower. See [Errors config](#errors-config).
-- A response described on its class is a `$ref` to `components.responses`.
+- A response described on its class is a `$ref` to `components.responses`, and the class's doc comment is its description.
 
-### 7. Keep the document checked
+### 9. Keep the document checked
 
 Commit `output`, then run `node ace openapi:check --strict` in CI and before each push. See [Run the check in CI and in a git hook](#run-the-check-in-ci-and-in-a-git-hook).
 

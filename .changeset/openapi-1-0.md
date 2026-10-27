@@ -2,7 +2,7 @@
 '@enzopita/adonisjs-openapi': major
 ---
 
-1.0 gives each tag one meaning, takes every error body from a class, and checks the document in CI. The README has a "Migrating from 0.x" guide.
+1.0 gives each doc tag form one meaning, takes every error body from a class, and checks the document in CI. The README has a "Migrating from 0.x" guide.
 
 Breaking changes:
 
@@ -14,10 +14,10 @@ Breaking changes:
 - An operation without `@tags` has no tags and gets `OA-S001`, instead of a tag from its route name. A tag that `document.tags` does not declare gets `OA-S002`.
 - `output` is the only document path. `openapi:generate --output` and the `file` option of `openapiRoutes()` are removed. The build hook runs `openapi:generate --no-strict`, so a warning never fails a build, and copies `output` into the build. `node ace add` no longer edits `metaFiles`.
 - `generateDocument()` returns `{ document, diagnostics, provenance }`. Each diagnostic has `code`, `severity`, `route`, `message`, `fix` and `location`, instead of a warning string.
-- A response that only comes from a middleware or exception class described by its doc comment is a `$ref` to `components.responses`, named after the class whatever the order of the routes.
+- The first paragraph of the doc comment of an app's middleware or exception class describes the responses it produces, instead of the status text. A response that only comes from such a class is a `$ref` to `components.responses`, named after the class whatever the order of the routes.
 - A VineJS `.nullable()` field is in `required` (#31).
 - A validator field named `query` is a body field, not a set of query parameters: `request.validateUsing()` passes no `query` key (#20).
-- `./types` exports only public types. `RouteOperation` is gone, and `GeneratedDocument` and `OpenApiUserConfig` are new.
+- `./types` exports only public types. `RouteOperation` is gone, `GeneratedDocument` and `OpenApiUserConfig` are new, and `OpenApiOperation.tags` is optional.
 
 Also in 1.0:
 

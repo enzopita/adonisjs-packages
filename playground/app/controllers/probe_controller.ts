@@ -32,6 +32,8 @@ export interface UpstreamError {
 
 /**
  * Handler patterns whose responses are not a single returned body.
+ *
+ * @tags Probe
  */
 export default class ProbeController {
   async branches({ request, response, serialize }: HttpContext) {

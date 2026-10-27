@@ -144,7 +144,7 @@ test.group('openapi:generate on the playground app: the document', group => {
   }) => {
     assert.deepEqual(document.paths['/api/v1/users/{id}']!.get!.tags, ['Users'])
     assert.deepEqual(document.paths['/api/v1/users']!.get!.tags, ['Directory'])
-    assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.tags, ['profile'])
+    assert.deepEqual(document.paths['/api/v1/account/profile']!.get!.tags, ['Account'])
   })
 
   test('takes the request body of an unvalidated handler from @requestBody', ({ assert }) => {
@@ -230,6 +230,15 @@ test.group('openapi:generate on the playground app: the document', group => {
   })
 
   test('writes the tags from the config', ({ assert }) => {
-    assert.deepEqual(document.tags, [{ name: 'Users', description: 'Public user profiles' }])
+    assert.deepEqual(
+      document.tags?.map(({ name }) => name),
+      ['Auth', 'Account', 'Users', 'Directory', 'Webhooks', 'Probe'],
+    )
+  })
+
+  test('tags an operation with the @tags of its controller class, not its route name', ({
+    assert,
+  }) => {
+    assert.deepEqual(document.paths['/api/v1/account/logout']!.post!.tags, ['Auth'])
   })
 })

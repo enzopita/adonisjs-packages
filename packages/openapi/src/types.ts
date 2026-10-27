@@ -74,6 +74,21 @@ export interface OpenApiConfig {
    * `--strict` and `--no-strict` flags of both commands override it.
    */
   strict: boolean
+  rules: RulesConfig
+}
+
+/**
+ * Style rules each operation is checked against. A rule left out is not checked.
+ */
+export interface RulesConfig {
+  /**
+   * The longest summary, in characters, without a warning.
+   */
+  summaryMaxLength?: number
+  /**
+   * `true` warns about a summary that does not end with a period, `false` about one that does.
+   */
+  summaryTrailingPeriod?: boolean
 }
 
 /**
@@ -158,7 +173,7 @@ export interface OpenApiOperation {
   operationId: string
   summary?: string
   description?: string
-  tags: string[]
+  tags?: string[]
   deprecated?: true
   parameters?: OpenApiParameter[]
   requestBody?: { required: true; content: Record<string, { schema: JsonSchema }> }
@@ -217,6 +232,10 @@ export type ResponseSource = (
  * - `OA-E001`: an `errors` entry whose exception status cannot be read from its source.
  * - `OA-E002`: a package exception that renders its own body, which its declaration does not carry.
  * - `OA-E003`: an `errors.throwers` or `errors.middleware` key that matches nothing in the documented routes.
+ * - `OA-S001`: an operation without tags.
+ * - `OA-S002`: a tag that `document.tags` does not declare.
+ * - `OA-S003`: a summary longer than `rules.summaryMaxLength`.
+ * - `OA-S004`: a summary whose trailing period breaks `rules.summaryTrailingPeriod`.
  * - `OA-J001`: a type with no JSON Schema, emitted as `{}`.
  * - `OA-J002`: a Lucid model, emitted as `{}`.
  */
@@ -235,6 +254,10 @@ export type DiagnosticCode =
   | 'OA-E001'
   | 'OA-E002'
   | 'OA-E003'
+  | 'OA-S001'
+  | 'OA-S002'
+  | 'OA-S003'
+  | 'OA-S004'
   | 'OA-J001'
   | 'OA-J002'
 

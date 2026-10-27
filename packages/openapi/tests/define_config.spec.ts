@@ -7,7 +7,7 @@ test.group('defineConfig', () => {
     assert.throws(
       // SAFETY: a JavaScript config has no types to reject the removed keys, which is what this checks.
       () => defineConfig({ info: { title: 'API' }, middlewareSecurity: {} } as never),
-      'openapi: the config is grouped as { output, document: { info, servers, tags }, routes, security: { schemes, middleware }, errors, strict }: "info" is now "document.info", "middlewareSecurity" is now "security.middleware"',
+      'openapi: the config is grouped as { output, document: { info, servers, tags }, routes, security: { schemes, middleware }, errors, strict, rules }: "info" is now "document.info", "middlewareSecurity" is now "security.middleware"',
     )
   })
 

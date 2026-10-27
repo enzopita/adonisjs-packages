@@ -9,7 +9,7 @@
       "post": {
         "operationId": "auth.new_account.store",
         "tags": [
-          "auth"
+          "Auth"
         ],
         "responses": {
           "201": {
@@ -149,7 +149,7 @@
       "post": {
         "operationId": "auth.access_tokens.store",
         "tags": [
-          "auth"
+          "Auth"
         ],
         "responses": {
           "200": {
@@ -226,7 +226,7 @@
       "get": {
         "operationId": "profile.profile.show",
         "tags": [
-          "profile"
+          "Account"
         ],
         "responses": {
           "200": {
@@ -291,7 +291,7 @@
       "post": {
         "operationId": "profile.access_tokens.destroy",
         "tags": [
-          "profile"
+          "Auth"
         ],
         "responses": {
           "200": {
@@ -356,7 +356,7 @@
       "put": {
         "operationId": "profile.avatar.update",
         "tags": [
-          "profile"
+          "Account"
         ],
         "responses": {
           "200": {
@@ -478,7 +478,7 @@
       "delete": {
         "operationId": "profile.avatar.destroy",
         "tags": [
-          "profile"
+          "Account"
         ],
         "responses": {
           "204": {
@@ -681,7 +681,7 @@
         "operationId": "webhooks.mail",
         "summary": "Receive a mail provider event",
         "tags": [
-          "webhooks"
+          "Webhooks"
         ],
         "responses": {
           "204": {
@@ -725,7 +725,7 @@
       "get": {
         "operationId": "probe.probe.branches",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -799,7 +799,7 @@
       "get": {
         "operationId": "probe.probe.empty",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "204": {
@@ -812,7 +812,7 @@
       "get": {
         "operationId": "probe.probe.maybe",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -841,7 +841,7 @@
       "get": {
         "operationId": "probe.probe.back",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "302": {
@@ -861,7 +861,7 @@
       "get": {
         "operationId": "probe.probe.text",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -881,7 +881,7 @@
       "get": {
         "operationId": "probe.probe.csv",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -901,7 +901,7 @@
       "post": {
         "operationId": "probe.probe.json_created",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "201": {
@@ -930,7 +930,7 @@
       "get": {
         "operationId": "probe.probe.limited",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "429": {
@@ -966,7 +966,7 @@
       "post": {
         "operationId": "probe.probe.sent",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "202": {
@@ -995,7 +995,7 @@
       "get": {
         "operationId": "probe.probe.aborted",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "403": {
@@ -1043,7 +1043,7 @@
       "get": {
         "operationId": "probe.probe.download",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1064,7 +1064,7 @@
       "get": {
         "operationId": "probe.probe.attachment",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1092,7 +1092,7 @@
       "get": {
         "operationId": "probe.probe.report",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1113,7 +1113,7 @@
       "get": {
         "operationId": "probe.probe.exported",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1141,7 +1141,7 @@
       "get": {
         "operationId": "probe.probe.stream",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1162,7 +1162,7 @@
       "get": {
         "operationId": "probe.probe.thrown",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1215,7 +1215,7 @@
       "get": {
         "operationId": "probe.verified",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1259,7 +1259,7 @@
       "get": {
         "operationId": "probe.probe.gated",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1333,7 +1333,7 @@
       "get": {
         "operationId": "probe.probe.reasoned",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1377,7 +1377,7 @@
       "get": {
         "operationId": "probe.probe.authorized",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1430,7 +1430,7 @@
       "get": {
         "operationId": "probe.probe.viewed",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1483,7 +1483,7 @@
       "get": {
         "operationId": "probe.probe.hidden",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1560,7 +1560,7 @@
       "get": {
         "operationId": "probe.probe.found",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1609,7 +1609,7 @@
       "get": {
         "operationId": "probe.probe.plan",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1665,7 +1665,7 @@
       "get": {
         "operationId": "probe.probe.seats",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1721,7 +1721,7 @@
       "get": {
         "operationId": "probe.probe.maintenance",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1760,7 +1760,7 @@
       "get": {
         "operationId": "probe.probe.upstream",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "502": {
@@ -1797,7 +1797,7 @@
       "get": {
         "operationId": "probe.throttled",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1845,7 +1845,7 @@
       "get": {
         "operationId": "probe.probe.model",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1863,7 +1863,7 @@
       "get": {
         "operationId": "probe.probe.collections",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1904,7 +1904,7 @@
       "get": {
         "operationId": "probe.probe.search",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -1972,7 +1972,7 @@
       "get": {
         "operationId": "probe.probe.item",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -2008,7 +2008,7 @@
       "get": {
         "operationId": "probe.probe.item.without_id",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -2034,7 +2034,7 @@
       "get": {
         "operationId": "probe.probe.echo.get",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -2081,7 +2081,7 @@
       "post": {
         "operationId": "probe.probe.echo.post",
         "tags": [
-          "probe"
+          "Probe"
         ],
         "responses": {
           "200": {
@@ -2262,8 +2262,28 @@
   },
   "tags": [
     {
+      "name": "Auth",
+      "description": "Sign up and log in"
+    },
+    {
+      "name": "Account",
+      "description": "The signed-in user"
+    },
+    {
       "name": "Users",
       "description": "Public user profiles"
+    },
+    {
+      "name": "Directory",
+      "description": "Listings of many users"
+    },
+    {
+      "name": "Webhooks",
+      "description": "Events other services post"
+    },
+    {
+      "name": "Probe",
+      "description": "Handler patterns the generator documents"
     }
   ]
 }

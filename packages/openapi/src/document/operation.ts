@@ -39,7 +39,6 @@ export function operationFor(
   const operation: OpenApiOperation = {
     operationId: route.methods.length > 1 ? `${route.operationId}.${method}` : route.operationId,
     ...meta,
-    tags: meta.tags ?? [route.name.split('.')[0] ?? route.name],
     responses,
   }
 

@@ -7,6 +7,7 @@ import { readApp } from '../program/app_types.ts'
 import { collectRoutes } from '../routes/collect_routes.ts'
 import type { Diagnostic, OpenApiConfig, OpenApiDocument, ResponseSource } from '../types.ts'
 import { operationFor } from './operation.ts'
+import { operationRules } from './operation_rules.ts'
 import { responsesFor } from './responses/responses.ts'
 import { securityFor } from './security.ts'
 import { bodyFields, mergeSchemas, validatorSchemas } from './validator_schemas.ts'
@@ -35,6 +36,7 @@ export async function generateDocument(
 
   const paths: OpenApiDocument['paths'] = {}
   const provenance: GeneratedDocument['provenance'] = {}
+  const checked = new Set<string>()
 
   for (const route of routes) {
     const { request, response } = types.routeTypes(route.name)
@@ -49,6 +51,13 @@ export async function generateDocument(
     diagnostics.push(
       ...docs.problems.map((problem): Diagnostic => ({ ...problem, route: route.name })),
     )
+
+    // The paths of a route with an optional param share its docs, which are checked once.
+    if (!checked.has(route.name)) {
+      checked.add(route.name)
+      const location = controller && types.locate(controller.method.name)
+      diagnostics.push(...operationRules(route.name, docs.meta, config, location))
+    }
 
     const { secured, security } = securityFor(route, config.security.middleware)
 

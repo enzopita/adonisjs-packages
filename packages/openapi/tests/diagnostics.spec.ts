@@ -120,6 +120,24 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
     assert.notInclude(output, 'OA-T008 broken.annotated: @todo')
   })
 
+  test('warns about an operation without tags and a tag not declared', ({ assert }) => {
+    assert.include(
+      output,
+      'OA-S001 style.untagged: the operation has no tags: add @tags to the action or to its controller class (app/controllers/style_controller.ts:2)',
+    )
+    assert.include(
+      output,
+      "OA-S002 style.wordy: the tag Styling is not declared: add { name: 'Styling' } to document.tags in config/openapi.ts",
+    )
+    assert.notInclude(output, 'the tag Broken is not declared')
+  })
+
+  test('checks the summary against the rules', ({ assert }) => {
+    assert.include(output, 'OA-S003 style.wordy: the summary is longer than 30 characters')
+    assert.include(output, 'OA-S004 style.wordy: the summary ends with a period')
+    assert.notInclude(output, 'OA-S003 style.untagged')
+  })
+
   test('warns that a package exception renders a body its declaration does not carry', ({
     assert,
   }) => {

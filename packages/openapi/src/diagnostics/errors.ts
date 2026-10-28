@@ -7,11 +7,12 @@ export function entryStatusUnreadable(
   key: string,
   name: string,
   location?: SourceLocation,
+  index?: number,
 ): Diagnostic {
   return {
     code: 'OA-E001',
     severity: 'warning',
-    message: `errors.${kind}['${key}']: the status of ${name} cannot be read, the entry is ignored`,
+    message: `errors.${kind}['${key}']${index === undefined ? '' : `[${index}]`}: the status of ${name} cannot be read, the entry is ignored`,
     fix: 'name an exception class with a numeric `status` field or `static status`',
     ...(location && { location }),
   }

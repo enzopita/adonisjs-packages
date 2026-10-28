@@ -1,5 +1,5 @@
 import ts from 'typescript'
-import { exceptionType } from '../exceptions/exception_class.ts'
+import { exceptionType, type ExceptionType } from '../exceptions/exception_class.ts'
 import { declaredStatus } from '../exceptions/exception_status.ts'
 import type { ExceptionResponses } from '../exceptions/exception_responses.ts'
 import type { Thrown } from '../exceptions/own_response.ts'
@@ -79,6 +79,30 @@ export class ConfiguredErrors {
     })
   }
 
+  #entry(
+    kind: ErrorsKind,
+    key: string,
+    runtimeName: string,
+    exception: ExceptionType | undefined,
+    declaration: ts.Node | undefined,
+    index?: number,
+  ): ConfiguredException {
+    const status = exception && declaredStatus(this.#checker, exception)
+
+    const entry: ConfiguredException = {
+      key,
+      name: exception?.name ?? (runtimeName || key),
+      responses: exception ? this.#exceptions.responses(exception, status) : [],
+      owner: exception?.symbol,
+      ...(declaration && { location: this.#location(declaration) }),
+    }
+
+    if (!entry.responses.length)
+      this.#problems.push(entryStatusUnreadable(kind, key, entry.name, entry.location, index))
+
+    return entry
+  }
+
   #entriesOf(kind: ErrorsKind) {
     const cached = this.#entries.get(kind)
 
@@ -103,26 +127,31 @@ export class ConfiguredErrors {
         const initializer =
           declaration && ts.isPropertyAssignment(declaration) ? declaration.initializer : undefined
 
+        if (Array.isArray(value)) {
+          const items =
+            initializer && ts.isArrayLiteralExpression(initializer) ? initializer : undefined
+
+          return value.map((item, index) => {
+            const element = items?.elements[index]
+
+            return this.#entry(
+              kind,
+              key,
+              item.name,
+              exceptionType(this.#checker, element && this.#checker.getSymbolAtLocation(element)),
+              element ?? declaration,
+              index,
+            )
+          })
+        }
+
         const exception =
           exceptionType(
             this.#checker,
             initializer && this.#checker.getSymbolAtLocation(initializer),
           ) ?? exceptionType(this.#checker, symbol)
 
-        const status = exception && declaredStatus(this.#checker, exception)
-
-        const entry: ConfiguredException = {
-          key,
-          name: exception?.name ?? (value.name || key),
-          responses: exception ? this.#exceptions.responses(exception, status) : [],
-          owner: exception?.symbol,
-          ...(declaration && { location: this.#location(declaration) }),
-        }
-
-        if (!entry.responses.length)
-          this.#problems.push(entryStatusUnreadable(kind, key, entry.name, entry.location))
-
-        return [entry]
+        return [this.#entry(kind, key, value.name, exception, declaration)]
       },
     )
 
@@ -137,9 +166,10 @@ export class ConfiguredErrors {
    */
   get diagnostics(): Diagnostic[] {
     const unmatched = (['throwers', 'middleware'] as const).flatMap(kind =>
-      this.#entriesOf(kind)
-        .filter(({ key }) => !this.#matched.has(`${kind}:${key}`))
-        .map(({ key, location }) => unmatchedKey(kind, key, location)),
+      [...new Map(this.#entriesOf(kind).map(entry => [entry.key, entry.location]))].flatMap(
+        ([key, location]) =>
+          this.#matched.has(`${kind}:${key}`) ? [] : [unmatchedKey(kind, key, location)],
+      ),
     )
 
     return [...this.#problems, ...unmatched]
@@ -171,18 +201,16 @@ export class ConfiguredErrors {
     return this.#errors.middleware?.[name] !== undefined
   }
 
-  #createdMiddlewareEntry(file: string) {
+  #createdMiddlewareEntries(file: string) {
     const creator = this.#creators.find(({ packageDir }) => file.startsWith(packageDir!))
 
-    if (!creator) return undefined
+    if (!creator) return []
 
-    const entry =
-      this.#entriesOf('middleware').find(({ key }) => key === creator.key) ??
-      this.#presets.find(({ preset }) => preset === creator)
+    const configured = this.#entriesOf('middleware').filter(({ key }) => key === creator.key)
 
-    if (entry && !entry.preset) this.#matched.add(`middleware:${entry.key}`)
+    if (configured.length) this.#matched.add(`middleware:${creator.key}`)
 
-    return entry
+    return configured.length ? configured : this.#presets.filter(({ preset }) => preset === creator)
   }
 
   createsMiddleware(file: string) {
@@ -203,11 +231,9 @@ export class ConfiguredErrors {
         return { middleware: entry.key, entry }
       })
 
-    const packaged = created.flatMap(({ name, file }) => {
-      const entry = this.#createdMiddlewareEntry(file)
-
-      return entry ? [{ middleware: name, entry }] : []
-    })
+    const packaged = created.flatMap(({ name, file }) =>
+      this.#createdMiddlewareEntries(file).map(entry => ({ middleware: name, entry })),
+    )
 
     return [...named, ...packaged].flatMap(({ middleware, entry }) =>
       entry.responses.flatMap(({ code, bodies }) =>

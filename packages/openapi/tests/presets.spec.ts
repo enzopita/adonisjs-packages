@@ -91,4 +91,27 @@ test.group('openapi:generate with the presets of first-party packages', () => {
     assert.notProperty(responses, '429')
     assert.notInclude(output, 'OA-E003')
   })
+
+  test('documents one response per class of an array', async ({ assert }) => {
+    const { document, output } = await generateWithErrors(
+      '  errors: { throwers: { verifyCredentials: [PlanLimitException, MaintenanceException] } },\n',
+      "import PlanLimitException from '#exceptions/plan_limit_exception'\nimport MaintenanceException from '#exceptions/maintenance_exception'\n",
+    )
+
+    const responses = document.paths['/api/v1/auth/login']!.post!.responses
+
+    assert.properties(responses, ['402', '503'])
+    assert.notProperty(responses, '400')
+    assert.notInclude(output, 'OA-E')
+  })
+
+  test('names the item of an array whose status cannot be read', async ({ assert }) => {
+    const { document, output } = await generateWithErrors(
+      '  errors: { throwers: { verifyCredentials: [PlanLimitException, Error] } },\n',
+      "import PlanLimitException from '#exceptions/plan_limit_exception'\n",
+    )
+
+    assert.properties(document.paths['/api/v1/auth/login']!.post!.responses, ['402'])
+    assert.include(output, "errors.throwers['verifyCredentials'][1]: the status of Error")
+  })
 })

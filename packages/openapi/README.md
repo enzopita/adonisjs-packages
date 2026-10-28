@@ -165,7 +165,7 @@ Routes behind a middleware that `security.middleware` maps get its scheme in `se
 
 The generator follows `throw new X()` in the app's code. It does not read package code, so `errors` names what packages throw. The first-party packages the app has come with presets, see [Package presets](#package-presets):
 
-- `errors.throwers` names the exception a call throws inside a package. Calls are matched in the action, in the functions of the app it calls, and in the `handle()` of the route's middleware, which the response then names as its source. The response is the one of the class, see [Error bodies](#error-bodies). A key is matched against the last names of the call. A call in the middle of the chain drops its method name and keeps its receiver:
+- `errors.throwers` names the exception a call throws inside a package, or an array of classes for a call that throws several, such as `'ally.user': [E_OAUTH_STATE_MISMATCH, E_OAUTH_MISSING_CODE]`. `errors.middleware` takes an array the same way. Calls are matched in the action, in the functions of the app it calls, and in the `handle()` of the route's middleware, which the response then names as its source. The response is the one of the class, see [Error bodies](#error-bodies). A key is matched against the last names of the call. A call in the middle of the chain drops its method name and keeps its receiver:
   - `findOrFail` matches any call of a method named `findOrFail`.
   - `bouncer.authorize` matches `bouncer.authorize()`, `ctx.bouncer.authorize()` and `bouncer.with(PostPolicy).authorize()`, which reads as `bouncer.authorize`.
   - `failures.consume` matches `failures.consume(key)`, where `failures` is the local name of the receiver, whatever its type.
@@ -312,15 +312,15 @@ errors: {
 },
 ```
 
-| Package             | Key                                                                 | Exception                 |
-| ------------------- | ------------------------------------------------------------------- | ------------------------- |
-| `@adonisjs/auth`    | `auth.authenticate`, `auth.authenticateUsing`, `auth.getUserOrFail` | `E_UNAUTHORIZED_ACCESS`   |
-| `@adonisjs/auth`    | `verifyCredentials`                                                 | `E_INVALID_CREDENTIALS`   |
-| `@adonisjs/ally`    | `ally.user`                                                         | `E_OAUTH_STATE_MISMATCH`  |
-| `@adonisjs/bouncer` | `bouncer.authorize`                                                 | `E_AUTHORIZATION_FAILURE` |
-| `@adonisjs/limiter` | `limiter.consume`                                                   | `E_TOO_MANY_REQUESTS`     |
-| `@adonisjs/limiter` | `limiter.define`, in `errors.middleware`                            | `E_TOO_MANY_REQUESTS`     |
-| `@adonisjs/lucid`   | `findOrFail`, `findByOrFail`, `firstOrFail`                         | `E_ROW_NOT_FOUND`         |
+| Package             | Key                                                                 | Exception                                        |
+| ------------------- | ------------------------------------------------------------------- | ------------------------------------------------ |
+| `@adonisjs/auth`    | `auth.authenticate`, `auth.authenticateUsing`, `auth.getUserOrFail` | `E_UNAUTHORIZED_ACCESS`                          |
+| `@adonisjs/auth`    | `verifyCredentials`                                                 | `E_INVALID_CREDENTIALS`                          |
+| `@adonisjs/ally`    | `ally.user`                                                         | `E_OAUTH_STATE_MISMATCH`, `E_OAUTH_MISSING_CODE` |
+| `@adonisjs/bouncer` | `bouncer.authorize`                                                 | `E_AUTHORIZATION_FAILURE`                        |
+| `@adonisjs/limiter` | `limiter.consume`                                                   | `E_TOO_MANY_REQUESTS`                            |
+| `@adonisjs/limiter` | `limiter.define`, in `errors.middleware`                            | `E_TOO_MANY_REQUESTS`                            |
+| `@adonisjs/lucid`   | `findOrFail`, `findByOrFail`, `firstOrFail`                         | `E_ROW_NOT_FOUND`                                |
 
 The app names a throttle that `limiter.define()` returns, so its preset is not matched by name. The generator finds where V8 says the function passed to `.use()` is declared, and a function declared in `@adonisjs/limiter` is a throttle. An `errors.middleware` key with the throttle's name, such as `globalThrottle`, replaces the preset for that throttle only.
 
@@ -722,5 +722,4 @@ Known cases where the document differs from what the app sends, or where the gen
 - A preset key is matched by name like any other, so `limiter.consume` matches `limiter.use(...).consume()` but not `failures.consume()` on a limiter held in a variable. Add that key to `errors.throwers`.
 - The paginator `metadata` fields are typed `string` by Lucid's `SimplePaginatorMetaKeys`, so they are documented as strings. The app sends numbers and `null`. Fix the type in the app's serializer.
 - Shield's CSRF guard runs on every route of the router stack, and its `exceptRoutes` is evaluated at runtime, so the generator does not document it. A rejected token redirects back with a `302`, although `E_BAD_CSRF_TOKEN` declares `403`, so do not name it in `errors.middleware`. Describe the redirect in the operation's description.
-- A thrower key names one class. `ally.use('github').user()` also throws `E_OAUTH_MISSING_CODE` (`500`) when the callback has no `code`, which `'ally.user'` cannot document next to `E_OAUTH_STATE_MISMATCH` ([#65](https://github.com/enzopita/adonisjs-packages/issues/65)).
 - A package that declares a field `any`, such as the `email` and `name` of the user that Ally's GitHub driver returns, documents it as `{}`. Type the value in the app, such as `githubUser.email as string | null`.

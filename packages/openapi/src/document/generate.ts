@@ -6,7 +6,7 @@ import type { Router } from '@adonisjs/core/http'
 import { namedErrors } from '../analysis/errors/named_errors.ts'
 import { locateFunctions, parsedScripts } from '../routes/function_location.ts'
 import type { Diagnostic, GeneratedDocument, OpenApiConfig } from '../types.ts'
-import type { WorkerInput } from './document_worker.ts'
+import type { WorkerInput } from './document_request.ts'
 import { operationIdFor } from './operation_id.ts'
 import { validatorSchemas } from './validator_schemas.ts'
 

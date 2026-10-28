@@ -17,6 +17,7 @@ import { MiddlewareResponses } from '../routes/middleware_responses.ts'
 import { TypeToSchema } from '../schema/type_to_schema.ts'
 import type { Diagnostic, ErrorsConfig, SourceLocation } from '../types.ts'
 import type { RouteOperation } from '../routes/route_operation.ts'
+import type { Scripts } from '../routes/function_location.ts'
 import { readBodyParser, type BodyParser } from './body_parser.ts'
 import { createProgram } from './create_program.ts'
 import { readEntry, renderEntry } from './entry_module.ts'
@@ -49,12 +50,14 @@ export interface AppTypes {
 
 /**
  * `configFile` is `config/openapi.ts`, whose type names the classes of `errors` when it exists.
+ * `scripts` locate the inline middleware that no function of the app's sources matches.
  */
 export function readApp(
   appRoot: string,
   routes: RouteOperation[],
   errors: ErrorsConfig,
   configFile?: string,
+  scripts?: Scripts,
 ): AppTypes {
   // TypeScript names files with `/`, and the compiler host matches this one by string.
   const entryFile = join(appRoot, '.adonisjs/openapi/routes.ts').split(sep).join('/')
@@ -132,6 +135,7 @@ export function readApp(
   const inline = inlineMiddleware(
     program,
     routes.flatMap(route => route.inlineMiddleware),
+    scripts,
   )
 
   return {

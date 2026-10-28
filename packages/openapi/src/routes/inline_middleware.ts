@@ -2,7 +2,7 @@ import ts from 'typescript'
 import { isAppSource } from '../analysis/symbols.ts'
 import { inlineLookupFailed } from '../diagnostics/route.ts'
 import type { Diagnostic } from '../types.ts'
-import { type FunctionLocation, locateFunctions } from './function_location.ts'
+import { type FunctionLocation, locateFunctions, type Scripts } from './function_location.ts'
 import type { RouteOperation } from './route_operation.ts'
 
 type FunctionNode = ts.ArrowFunction | ts.FunctionExpression | ts.FunctionDeclaration
@@ -162,7 +162,14 @@ function declaredAt(sourceFile: ts.SourceFile, { line, column }: FunctionLocatio
   return found
 }
 
-export function inlineMiddleware(program: ts.Program, middleware: InlineMiddleware[]) {
+/**
+ * `scripts` are the ones V8 had parsed before the lookup, which reads them itself without them.
+ */
+export function inlineMiddleware(
+  program: ts.Program,
+  middleware: InlineMiddleware[],
+  scripts?: Scripts,
+) {
   let index: Map<string, FunctionNode[]> | undefined
   const erased = new Map<FunctionNode, string | undefined>()
 
@@ -216,6 +223,7 @@ export function inlineMiddleware(program: ts.Program, middleware: InlineMiddlewa
     if (!locations) {
       const { found, failures } = locateFunctions(
         middleware.flatMap(({ source, fn }) => (bySource(source).kind === 'missing' ? [fn] : [])),
+        scripts,
       )
 
       const [first, ...rest] = [...new Set(failures.map(({ message }) => message))]

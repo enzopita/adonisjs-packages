@@ -60,12 +60,14 @@ function original(script: Script, line: number, column: number): FunctionLocatio
 /**
  * Where V8 says each function was declared, mapped through the source map of its script. A bound
  * function is located by the function it binds. A function V8 has no script with a file for, such
- * as a native one, has no location.
+ * as a native one, has no location. A failure of the inspector or of the mapping ends the lookup
+ * and comes back with the locations found so far.
  */
 export function locateFunctions(functions: Function[]) {
   const found = new Map<Function, FunctionLocation>()
+  let failure: Error | undefined
 
-  if (!functions.length) return found
+  if (!functions.length) return { found, failure }
 
   const session = new Session()
   const scripts = new Map<string, Script>()
@@ -121,11 +123,12 @@ export function locateFunctions(functions: Function[]) {
 
       if (mapped) found.set(fn, mapped)
     }
-  } catch {
+  } catch (error) {
+    failure = error instanceof Error ? error : new Error(String(error))
   } finally {
     Reflect.deleteProperty(globalThis, HANDLE)
     session.disconnect()
   }
 
-  return found
+  return { found, failure }
 }

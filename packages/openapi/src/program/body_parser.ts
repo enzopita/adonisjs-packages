@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs'
 
 export interface BodyParser {
   methods: Set<string>
-  mediaTypes: string[]
+  mediaTypes: (pattern: string) => string[]
   fileMediaType: string
 }
 
@@ -87,13 +87,34 @@ export function readBodyParser(file: string): BodyParser {
 
   const multipart = canonical('multipart')
 
-  const mediaTypes = [canonical('json'), canonical('form'), multipart].filter(
-    (type): type is string => type !== undefined,
-  )
+  const multipartSettings = member(config, 'multipart')
+
+  const multipartSetting = (name: string) =>
+    multipartSettings && ts.isObjectLiteralExpression(multipartSettings)
+      ? member(multipartSettings, name)
+      : undefined
+
+  const autoProcess = multipartSetting('autoProcess')
+  const autoProcessed = strings(autoProcess)
+  const processManually = strings(multipartSetting('processManually')) ?? []
+
+  // The validator only sees the fields of a multipart body the bodyparser processed itself.
+  const processesMultipart = (pattern: string) =>
+    autoProcess?.kind !== ts.SyntaxKind.FalseKeyword &&
+    (autoProcessed?.includes(pattern) ?? true) &&
+    !processManually.includes(pattern)
 
   return {
     methods: new Set(strings(member(config, 'allowedMethods')) ?? DEFAULTS.allowedMethods),
-    mediaTypes: mediaTypes.length ? mediaTypes : [DEFAULTS.json[0]!],
+    mediaTypes: pattern => {
+      const mediaTypes = [
+        canonical('json'),
+        canonical('form'),
+        processesMultipart(pattern) ? multipart : undefined,
+      ].filter((type): type is string => type !== undefined)
+
+      return mediaTypes.length ? mediaTypes : [DEFAULTS.json[0]!]
+    },
     fileMediaType: multipart ?? DEFAULTS.multipart[0]!,
   }
 }

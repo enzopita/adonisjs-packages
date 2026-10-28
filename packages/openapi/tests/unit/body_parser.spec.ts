@@ -27,7 +27,7 @@ test.group('readBodyParser', () => {
     )
 
     assert.deepEqual([...parser.methods], ['POST'])
-    assert.deepEqual(parser.mediaTypes, ['application/json', 'multipart/form-data'])
+    assert.deepEqual(parser.mediaTypes('/'), ['application/json', 'multipart/form-data'])
   })
 
   test('picks the standard type of each parser, or its first configured type', async ({
@@ -43,7 +43,7 @@ test.group('readBodyParser', () => {
       `),
     )
 
-    assert.deepEqual(parser.mediaTypes, [
+    assert.deepEqual(parser.mediaTypes('/'), [
       'application/vnd.api+json',
       'application/x-www-form-urlencoded',
     ])
@@ -61,7 +61,7 @@ test.group('readBodyParser', () => {
       `),
     )
 
-    assert.deepEqual(parser.mediaTypes, ['application/json'])
+    assert.deepEqual(parser.mediaTypes('/'), ['application/json'])
   })
 
   test('keeps the default of a setting that is not a literal array of strings', async ({
@@ -75,11 +75,35 @@ test.group('readBodyParser', () => {
       `),
     )
 
-    assert.deepEqual(parser.mediaTypes, [
+    assert.deepEqual(parser.mediaTypes('/'), [
       'application/json',
       'application/x-www-form-urlencoded',
       'multipart/form-data',
     ])
+  })
+
+  test('leaves out multipart on the routes the bodyparser does not process it for', async ({
+    assert,
+  }) => {
+    const off = readBodyParser(
+      await configFile(`export default defineConfig({ multipart: { autoProcess: false } })`),
+    )
+
+    const scoped = readBodyParser(
+      await configFile(`
+        export default defineConfig({
+          multipart: { autoProcess: ['/uploads', '/files/:id'], processManually: ['/files/:id'] },
+        })
+      `),
+    )
+
+    assert.deepEqual(off.mediaTypes('/uploads'), [
+      'application/json',
+      'application/x-www-form-urlencoded',
+    ])
+    assert.include(scoped.mediaTypes('/uploads'), 'multipart/form-data')
+    assert.notInclude(scoped.mediaTypes('/files/:id'), 'multipart/form-data')
+    assert.notInclude(scoped.mediaTypes('/users'), 'multipart/form-data')
   })
 
   test('falls back to the bodyparser defaults without a config file', ({ assert }) => {

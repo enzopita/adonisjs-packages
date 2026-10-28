@@ -1,4 +1,5 @@
 import { enableCompileCache } from 'node:module'
+import { fileURLToPath } from 'node:url'
 import { BaseCommand, flags } from '@adonisjs/core/ace'
 import { defineConfig } from '../src/define_config.ts'
 import type { Diagnostic, OpenApiConfig } from '../src/types.ts'
@@ -20,6 +21,12 @@ export abstract class OpenApiCommand extends BaseCommand {
   protected async generate(options: { strict?: boolean } = {}) {
     // Every run loads the same app and the 9 MB TypeScript compiler: V8 compiles them once.
     enableCompileCache()
+
+    // Loaded on run: it pulls in the assembler and starts the TypeScript compiler, which every
+    // other ace command would pay for. Started before the app boots, which it parses alongside.
+    const { prepareDocument } = await import('../src/document/generate.ts')
+    const document = prepareDocument(fileURLToPath(this.app.appRoot))
+
     this.app.setEnvironment('web')
     this.app.setMode('warmup')
     await this.app.boot()
@@ -30,9 +37,7 @@ export abstract class OpenApiCommand extends BaseCommand {
 
     const config = this.app.config.get<OpenApiConfig | undefined>('openapi') ?? defineConfig()
 
-    // Loaded on run: it pulls in the TypeScript compiler, which every other ace command would pay for.
-    const { generateDocument } = await import('../src/document/generate.ts')
-    const generated = await generateDocument(this.app, router, config)
+    const generated = await document.generate(this.app, router, config)
     const strict = options.strict ?? this.strict ?? config.strict
 
     const diagnostics = strict

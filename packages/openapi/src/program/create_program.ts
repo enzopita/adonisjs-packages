@@ -3,10 +3,11 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
- * The app's own program, with the in-memory `entryFile` added: its sources are the ones the app
- * compiles, so the module augmentations (container bindings, auth guards) the types depend on apply.
+ * Parses the app's own program up front, before the `entryFile` exists, and returns how to create
+ * it with that file added: its sources are the ones the app compiles, so the module augmentations
+ * (container bindings, auth guards) the types depend on apply.
  */
-export function createProgram(appRoot: string, entryFile: string, entrySource: string) {
+export function prepareProgram(appRoot: string) {
   const dataFile = join(appRoot, '.adonisjs/client/data.d.ts')
 
   const config = ts.getParsedCommandLineOfConfigFile(
@@ -22,20 +23,43 @@ export function createProgram(appRoot: string, entryFile: string, entrySource: s
 
   if (!config) throw new Error(`openapi: cannot read ${join(appRoot, 'tsconfig.json')}`)
 
+  const options = { ...config.options, noEmit: true }
   const host = ts.createCompilerHost(config.options)
   const getSourceFile = host.getSourceFile.bind(host)
-  host.getSourceFile = (fileName, languageVersion, ...rest) =>
-    fileName === entryFile
-      ? ts.createSourceFile(fileName, entrySource, languageVersion)
-      : getSourceFile(fileName, languageVersion, ...rest)
+  const parsed = new Map<string, ts.SourceFile>()
+  const data = existsSync(dataFile) ? [dataFile] : []
+  let entry: { file: string; source: string } | undefined
+
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
+    if (fileName === entry?.file)
+      return ts.createSourceFile(fileName, entry.source, languageVersion)
+
+    const cached = shouldCreateNewSourceFile ? undefined : parsed.get(fileName)
+
+    if (cached) return cached
+
+    const sourceFile = getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile)
+
+    if (sourceFile) parsed.set(fileName, sourceFile)
+
+    return sourceFile
+  }
+
   const fileExists = host.fileExists.bind(host)
-  host.fileExists = fileName => fileName === entryFile || fileExists(fileName)
+  host.fileExists = fileName => fileName === entry?.file || fileExists(fileName)
 
-  const program = ts.createProgram({
-    rootNames: [...config.fileNames, entryFile, ...(existsSync(dataFile) ? [dataFile] : [])],
-    options: { ...config.options, noEmit: true },
-    host,
-  })
+  // Never bound: the checker of the program below binds the source files it shares with this one.
+  ts.createProgram({ rootNames: [...config.fileNames, ...data], options, host })
 
-  return { program, options: config.options, dataFile }
+  return (entryFile: string, entrySource: string) => {
+    entry = { file: entryFile, source: entrySource }
+
+    const program = ts.createProgram({
+      rootNames: [...config.fileNames, entryFile, ...data],
+      options,
+      host,
+    })
+
+    return { program, options: config.options, dataFile }
+  }
 }

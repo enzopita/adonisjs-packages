@@ -1,33 +1,57 @@
-import { fileURLToPath } from 'node:url'
-import type { ApplicationService } from '@adonisjs/core/types'
+import type { NamedErrors } from '../analysis/errors/named_errors.ts'
 import { operationDocs, type OperationDocs } from '../analysis/tags/operation_docs.ts'
 import { duplicateOperationId } from '../diagnostics/operation.ts'
 import { lucidModel, noJsonSchema } from '../diagnostics/route.ts'
 import { readApp } from '../program/app_types.ts'
+import type { prepareProgram } from '../program/create_program.ts'
 import type { RouteOperation } from '../routes/route_operation.ts'
-import type { Scripts } from '../routes/function_location.ts'
-import type { Diagnostic, GeneratedDocument, OpenApiConfig, OpenApiDocument } from '../types.ts'
+import type { locateFunctions } from '../routes/function_location.ts'
+import type {
+  Diagnostic,
+  GeneratedDocument,
+  JsonSchema,
+  OpenApiConfig,
+  OpenApiDocument,
+} from '../types.ts'
 import { errorCodes } from './error_codes.ts'
 import { operationFor } from './operation.ts'
-import { operationIdFor } from './operation_id.ts'
 import { operationRules } from './operation_rules.ts'
 import { ResponseComponents } from './response_components.ts'
 import { responsesFor } from './responses/responses.ts'
 import { securityFor } from './security.ts'
-import { bodyFields, mergeSchemas, validatorSchemas } from './validator_schemas.ts'
+import { bodyFields, mergeSchemas } from './validator_schemas.ts'
 
 const NO_DOCS: OperationDocs = { meta: {}, throws: [], responses: [], examples: [], problems: [] }
 
-export async function documentOf(
-  app: ApplicationService,
-  routes: RouteOperation[],
-  config: OpenApiConfig,
-  diagnostics: Diagnostic[],
-  scripts?: Scripts,
-): Promise<GeneratedDocument> {
-  const appRoot = fileURLToPath(app.appRoot)
-  const types = readApp(appRoot, routes, config.errors, app.configPath('openapi.ts'), scripts)
-  const vine = await validatorSchemas(app, routes, diagnostics)
+/**
+ * What the document reads from the running app and its config, which a worker thread can receive:
+ * `operationIds` are those of each route, by method, and `diagnostics` the ones found so far.
+ */
+export interface DocumentInput {
+  appRoot: string
+  configFile: string
+  routes: RouteOperation[]
+  operationIds: string[][]
+  config: Omit<OpenApiConfig, 'routes' | 'operationId' | 'errors'> & { errors: NamedErrors }
+  vine: Map<string, JsonSchema>
+  diagnostics: Diagnostic[]
+}
+
+export function documentOf(
+  {
+    appRoot,
+    configFile,
+    routes,
+    operationIds: routeOperationIds,
+    config,
+    vine,
+    diagnostics,
+  }: DocumentInput,
+  createProgram: ReturnType<typeof prepareProgram>,
+  locateInline?: typeof locateFunctions,
+): GeneratedDocument {
+  const types = readApp(createProgram, appRoot, routes, config.errors, configFile, locateInline)
+  const routeIndex = new Map(routes.map((route, index) => [route, index]))
 
   const paths: OpenApiDocument['paths'] = {}
   const provenance: GeneratedDocument['provenance'] = {}
@@ -69,8 +93,8 @@ export async function documentOf(
       const methods = paths[variant.path] ?? {}
       paths[variant.path] = methods
 
-      for (const method of variant.methods) {
-        const operationId = operationIdFor(variant, method, config.operationId)
+      for (const [index, method] of variant.methods.entries()) {
+        const operationId = routeOperationIds[routeIndex.get(variant)!]![index]!
         const first = operationIds.get(operationId)
 
         if (first === undefined)

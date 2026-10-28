@@ -1,6 +1,7 @@
 import ts from 'typescript'
 import { existsSync } from 'node:fs'
 import { join, sep } from 'node:path'
+import { createSourceFile, hydrateOnRead } from './lazy_jsdoc.ts'
 import { fileReuse, parseKey, type ParsedFiles, type ProgramInput } from './parsed_files.ts'
 
 /**
@@ -31,11 +32,11 @@ export function prepareProgram(appRoot: string, previous?: ParsedFiles) {
   const key = parseKey(options)
   const host = ts.createCompilerHost(config.options)
   const files = fileReuse(host, key, previous)
-  const getSourceFile = host.getSourceFile.bind(host)
   const parsed = new Map<string, ts.SourceFile>()
   const data = existsSync(dataFile) ? [dataFile] : []
   let entrySource = ''
 
+  // Reads a file as the compiler's own host does, which parses it with `ts.createSourceFile()`.
   host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) => {
     if (fileName === entryFile) return ts.createSourceFile(fileName, entrySource, languageVersion)
 
@@ -51,12 +52,26 @@ export function prepareProgram(appRoot: string, previous?: ParsedFiles) {
       return reused
     }
 
-    const sourceFile = getSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile)
+    let text: string | undefined
 
-    if (sourceFile) {
-      parsed.set(fileName, sourceFile)
-      files.parsed(sourceFile)
+    try {
+      text = host.readFile(fileName)
+    } catch (error) {
+      onError?.(error instanceof Error ? error.message : String(error))
+      text = ''
     }
+
+    if (text === undefined) return undefined
+
+    // SAFETY: a program gives its host the options of each file, never a bare target.
+    const sourceFile = createSourceFile(
+      fileName,
+      text,
+      languageVersion as ts.CreateSourceFileOptions,
+    )
+
+    parsed.set(fileName, sourceFile)
+    files.parsed(sourceFile)
 
     return sourceFile
   }
@@ -93,6 +108,8 @@ export function prepareProgram(appRoot: string, previous?: ParsedFiles) {
       entrySource = source
 
       const program = ts.createProgram({ rootNames, options, host, oldProgram })
+      program.getTypeChecker()
+      hydrateOnRead()
 
       return { program, options: config.options, dataFile }
     },

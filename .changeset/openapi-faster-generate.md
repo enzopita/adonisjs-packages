@@ -8,3 +8,4 @@ Generate the document faster, with the same output:
 - Both commands enable the compile cache of Node, so later runs load the app and the 9 MB TypeScript compiler from compiled code.
 - The lookup of a function passed to `.use()`, such as a `limiter.define()` throttle, no longer pays for the TypeScript compiler's source in the inspector.
 - After a run from a terminal, a background process saves the parsed program as a V8 startup snapshot in `node_modules/.cache/adonisjs-openapi`. Later runs start from it and parse only the files that changed, which saves about a second on a small app. `ADONISJS_OPENAPI_CACHE=false` turns it off, and an absolute path moves it.
+- The declaration files of the app's dependencies parse without their doc comments, and a file parses them when the document reads one.

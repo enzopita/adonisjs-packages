@@ -1,5 +1,15 @@
 # @enzopita/adonisjs-openapi
 
+## 1.2.2
+
+### Patch Changes
+
+- [#77](https://github.com/enzopita/adonisjs-packages/pull/77) [`68e8e3a`](https://github.com/enzopita/adonisjs-packages/commit/68e8e3a0e9c6c53c33471ecafd6b9102ef206e60) Thanks [@RenanCGarcia](https://github.com/RenanCGarcia)! - Generate and check the document on Windows, where `path` gives `\` separators:
+
+  - `openapi:generate` and `openapi:check` failed with `Cannot read properties of undefined (reading 'statements')`, since the entry file's path never matched the `/` path TypeScript asks the compiler host for.
+  - The entry module imported the app's error body and `config/openapi.ts` through a `\` specifier, read as escapes, so every `errors.throwers` and `errors.middleware` entry got `OA-E001`.
+  - A function middleware a package creates, such as a `limiter.define()` throttle, got `OA-R003`, since its location kept `\` while the package directory resolved with `/`.
+
 ## 1.2.1
 
 ### Patch Changes

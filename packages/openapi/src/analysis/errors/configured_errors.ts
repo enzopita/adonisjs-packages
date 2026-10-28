@@ -7,6 +7,7 @@ import { property } from '../symbols.ts'
 import { callMatches } from './throwers.ts'
 import { isPresetKey, type PresetException } from './presets.ts'
 import {
+  emptyEntry,
   entryStatusUnreadable,
   unknownPresetKey,
   unmatchedKey,
@@ -25,6 +26,38 @@ export interface ConfiguredException {
   owner?: ts.Symbol
   location?: SourceLocation
   preset?: PresetException
+}
+
+function arrayLiteral(
+  checker: ts.TypeChecker,
+  node: ts.Node | undefined,
+  seen = new Set<ts.Node>(),
+): ts.ArrayLiteralExpression | undefined {
+  if (!node || seen.has(node)) return undefined
+
+  seen.add(node)
+
+  if (ts.isArrayLiteralExpression(node)) return node
+
+  if (
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node) ||
+    ts.isParenthesizedExpression(node) ||
+    ts.isTypeAssertionExpression(node)
+  )
+    return arrayLiteral(checker, node.expression, seen)
+
+  if (!ts.isIdentifier(node)) return undefined
+
+  let symbol = checker.getSymbolAtLocation(node)
+
+  if (symbol && symbol.flags & ts.SymbolFlags.Alias) symbol = checker.getAliasedSymbol(symbol)
+
+  const declaration = symbol?.valueDeclaration
+
+  return declaration && ts.isVariableDeclaration(declaration)
+    ? arrayLiteral(checker, declaration.initializer, seen)
+    : undefined
 }
 
 /**
@@ -128,8 +161,10 @@ export class ConfiguredErrors {
           declaration && ts.isPropertyAssignment(declaration) ? declaration.initializer : undefined
 
         if (Array.isArray(value)) {
-          const items =
-            initializer && ts.isArrayLiteralExpression(initializer) ? initializer : undefined
+          if (!value.length)
+            this.#problems.push(emptyEntry(kind, key, declaration && this.#location(declaration)))
+
+          const items = arrayLiteral(this.#checker, initializer)
 
           return value.map((item, index) => {
             const element = items?.elements[index]

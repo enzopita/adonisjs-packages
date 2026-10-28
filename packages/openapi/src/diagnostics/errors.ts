@@ -41,6 +41,16 @@ export function unknownPresetKey(
   }
 }
 
+export function emptyEntry(kind: ErrorsKind, key: string, location?: SourceLocation): Diagnostic {
+  return {
+    code: 'OA-E003',
+    severity: 'warning',
+    message: `errors.${kind}['${key}'] is an empty array, which documents nothing and turns off the preset of that key`,
+    fix: 'name the exception classes, or use `false` to turn the preset off',
+    ...(location && { location }),
+  }
+}
+
 export function unmatchedKey(kind: ErrorsKind, key: string, location?: SourceLocation): Diagnostic {
   const throwers = kind === 'throwers'
 

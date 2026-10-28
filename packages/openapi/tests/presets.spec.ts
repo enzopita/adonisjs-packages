@@ -114,4 +114,31 @@ test.group('openapi:generate with the presets of first-party packages', () => {
     assert.properties(document.paths['/api/v1/auth/login']!.post!.responses, ['402'])
     assert.include(output, "errors.throwers['verifyCredentials'][1]: the status of Error")
   })
+
+  test('reads an array that a const holds, through a const that holds it', async ({ assert }) => {
+    const { document, output } = await generateWithErrors(
+      "  errors: { throwers: { 'ally.user': allyFailures } },\n",
+      [
+        "import { errors as allyErrors } from '@adonisjs/ally'",
+        'const base = [allyErrors.E_OAUTH_STATE_MISMATCH, allyErrors.E_OAUTH_MISSING_CODE]',
+        'const allyFailures = (base satisfies unknown[])',
+        '',
+      ].join('\n'),
+    )
+
+    assert.sameMembers(Object.keys(document.paths['/oauth/github/callback']!.get!.responses), [
+      '200',
+      '400',
+      '500',
+    ])
+    assert.notInclude(output, 'OA-E')
+  })
+
+  test('warns on an empty array and suggests false', async ({ assert }) => {
+    const { output } = await generateWithErrors("  errors: { throwers: { 'ally.user': [] } },\n")
+
+    assert.include(output, 'OA-E003')
+    assert.include(output, "errors.throwers['ally.user'] is an empty array")
+    assert.include(output, 'false')
+  })
 })

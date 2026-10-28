@@ -35,7 +35,8 @@
   "scripts": {
     "build": "rm -rf build && tsc -p tsconfig.build.json && cp -r stubs/config build/stubs/",
     "test": "pnpm run build && node --import=@poppinss/ts-exec --enable-source-maps bin/test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bench": "pnpm run build && node --import=@poppinss/ts-exec bench/bench.ts"
   },
   "dependencies": {
     "mime-types": "catalog:",

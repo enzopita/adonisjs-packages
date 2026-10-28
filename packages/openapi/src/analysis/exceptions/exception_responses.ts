@@ -177,7 +177,8 @@ export class ExceptionResponses {
 
     if (handle === 'unread') return this.#packagedBody(exception, codes)
 
-    if (exception.symbol && exception.symbol === this.#validation?.symbol)
+    // The framework matches its `code`, so a subclass and vine's exported class render the same.
+    if (this.#validation && lineage(this.#checker, exception.instance).has(this.#validation.symbol))
       return bodiesFor(codes, this.#validation.body ? [this.#validation.body] : [])
 
     const rendered = this.#branches(this.#handler.rendered, exception)

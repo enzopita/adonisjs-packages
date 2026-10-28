@@ -91,7 +91,12 @@ export function readApp(
   const resolution = { program, checker, from: resolveFrom, options }
   const { presets, packaged } = packagePresets(resolution, types.authErrorBody)
   const unauthorized = packageException(resolution, '@adonisjs/auth', 'E_UNAUTHORIZED_ACCESS')
-  const validation = packageException(resolution, '@vinejs/vine', 'E_VALIDATION_ERROR')?.symbol
+
+  const validation = packageException(
+    resolution,
+    '@vinejs/vine',
+    'E_VALIDATION_ERROR',
+  )?.instance.getSymbol()
 
   const exceptions = readExceptionResponses(
     checker,

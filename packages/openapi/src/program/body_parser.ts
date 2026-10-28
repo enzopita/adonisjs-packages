@@ -3,9 +3,8 @@ import { existsSync, readFileSync } from 'node:fs'
 
 export interface BodyParser {
   methods: Set<string>
-  json: string[]
-  form: string[]
-  multipart: string[]
+  mediaTypes: string[]
+  fileMediaType: string
 }
 
 /**
@@ -80,10 +79,21 @@ export function readBodyParser(file: string): BodyParser {
     )
   }
 
+  const canonical = (parser: 'json' | 'form' | 'multipart') => {
+    const accepted = types(parser)
+
+    return accepted.includes(DEFAULTS[parser][0]!) ? DEFAULTS[parser][0] : accepted[0]
+  }
+
+  const multipart = canonical('multipart')
+
+  const mediaTypes = [canonical('json'), canonical('form'), multipart].filter(
+    (type): type is string => type !== undefined,
+  )
+
   return {
     methods: new Set(strings(member(config, 'allowedMethods')) ?? DEFAULTS.allowedMethods),
-    json: types('json'),
-    form: types('form'),
-    multipart: types('multipart'),
+    mediaTypes: mediaTypes.length ? mediaTypes : [DEFAULTS.json[0]!],
+    fileMediaType: multipart ?? DEFAULTS.multipart[0]!,
   }
 }

@@ -27,9 +27,41 @@ test.group('readBodyParser', () => {
     )
 
     assert.deepEqual([...parser.methods], ['POST'])
-    assert.deepEqual(parser.json, ['application/json'])
-    assert.deepEqual(parser.form, [])
-    assert.deepEqual(parser.multipart, ['multipart/form-data'])
+    assert.deepEqual(parser.mediaTypes, ['application/json', 'multipart/form-data'])
+  })
+
+  test('picks the standard type of each parser, or its first configured type', async ({
+    assert,
+  }) => {
+    const parser = readBodyParser(
+      await configFile(`
+        export default defineConfig({
+          json: { types: ['application/vnd.api+json', 'application/csp-report'] },
+          form: { types: ['text/x', 'application/x-www-form-urlencoded'] },
+          multipart: { types: [] },
+        })
+      `),
+    )
+
+    assert.deepEqual(parser.mediaTypes, [
+      'application/vnd.api+json',
+      'application/x-www-form-urlencoded',
+    ])
+    assert.equal(parser.fileMediaType, 'multipart/form-data')
+  })
+
+  test('lists application/json when no parser accepts a type', async ({ assert }) => {
+    const parser = readBodyParser(
+      await configFile(`
+        export default defineConfig({
+          json: { types: [] },
+          form: { types: [] },
+          multipart: { types: [] },
+        })
+      `),
+    )
+
+    assert.deepEqual(parser.mediaTypes, ['application/json'])
   })
 
   test('keeps the default of a setting that is not a literal array of strings', async ({
@@ -43,14 +75,17 @@ test.group('readBodyParser', () => {
       `),
     )
 
-    assert.lengthOf(parser.json, 4)
-    assert.deepEqual(parser.form, ['application/x-www-form-urlencoded'])
+    assert.deepEqual(parser.mediaTypes, [
+      'application/json',
+      'application/x-www-form-urlencoded',
+      'multipart/form-data',
+    ])
   })
 
   test('falls back to the bodyparser defaults without a config file', ({ assert }) => {
     const parser = readBodyParser(join(tmpdir(), 'missing', 'bodyparser.ts'))
 
     assert.deepEqual([...parser.methods], ['POST', 'PUT', 'PATCH', 'DELETE'])
-    assert.deepEqual(parser.form, ['application/x-www-form-urlencoded'])
+    assert.equal(parser.fileMediaType, 'multipart/form-data')
   })
 })

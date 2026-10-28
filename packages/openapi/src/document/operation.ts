@@ -44,14 +44,24 @@ export function operationFor(
 
   if (body) {
     const mediaTypes = JSON.stringify(body).includes('"format":"binary"')
-      ? parser.multipart
-      : [...parser.json, ...parser.form, ...parser.multipart]
+      ? [parser.fileMediaType]
+      : parser.mediaTypes
+
+    const schema =
+      mediaTypes.length > 1 && !body.$ref ? shared(app, `${operationId}.body`, body) : body
 
     operation.requestBody = {
       required: true,
-      content: Object.fromEntries(mediaTypes.map(mediaType => [mediaType, { schema: body }])),
+      content: Object.fromEntries(mediaTypes.map(mediaType => [mediaType, { schema }])),
     }
   }
 
   return operation
+}
+
+// orval types and sends a body listed inline under several media types as a union with no Content-Type.
+function shared(app: AppTypes, name: string, schema: JsonSchema): JsonSchema {
+  app.schemas.components[name] = schema
+
+  return { $ref: `#/components/schemas/${name}` }
 }

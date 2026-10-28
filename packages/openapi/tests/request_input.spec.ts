@@ -37,4 +37,19 @@ test.group('openapi:generate on the playground app: the request input', group =>
       required: ['nickname'],
     })
   })
+
+  test('lists a validated body under each media type the bodyparser config accepts', ({
+    assert,
+  }) => {
+    const nullable = document.paths['/api/v1/probe/nullable']!.post!
+
+    assert.deepEqual(Object.keys(nullable.requestBody!.content), [
+      'application/json',
+      'application/json-patch+json',
+      'application/vnd.api+json',
+      'application/csp-report',
+      'application/x-www-form-urlencoded',
+      'multipart/form-data',
+    ])
+  })
 })

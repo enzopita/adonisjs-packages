@@ -15,17 +15,14 @@ export interface OperationParts {
   operationId: string
 }
 
-/**
- * The operation of one method of a route. `get` and `options` read their input from the query
- * string, the other methods from the body.
- */
 export function operationFor(
   route: RouteOperation,
   method: HttpMethod,
   app: AppTypes,
   { meta, requestBody, input, fields, responses, security, operationId }: OperationParts,
 ): OpenApiOperation {
-  const readsQueryOnly = method === 'get' || method === 'options'
+  const parser = app.bodyParser
+  const readsQueryOnly = !parser.methods.has(method.toUpperCase())
   const validated = readsQueryOnly ? undefined : fields
   const body = requestBody ? app.schemas.convert(requestBody) : validated
 
@@ -46,11 +43,14 @@ export function operationFor(
   if (security.length) operation.security = security
 
   if (body) {
-    const mediaType = JSON.stringify(body).includes('"format":"binary"')
-      ? 'multipart/form-data'
-      : 'application/json'
+    const mediaTypes = JSON.stringify(body).includes('"format":"binary"')
+      ? parser.multipart
+      : [...parser.json, ...parser.form, ...parser.multipart]
 
-    operation.requestBody = { required: true, content: { [mediaType]: { schema: body } } }
+    operation.requestBody = {
+      required: true,
+      content: Object.fromEntries(mediaTypes.map(mediaType => [mediaType, { schema: body }])),
+    }
   }
 
   return operation

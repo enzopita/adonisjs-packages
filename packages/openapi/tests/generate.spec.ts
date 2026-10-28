@@ -161,22 +161,18 @@ test.group('openapi:generate on the playground app: the document', group => {
   })
 
   test('takes the request body of an unvalidated handler from @requestBody', ({ assert }) => {
-    assert.deepEqual(document.paths['/api/v1/webhooks/mail']!.post!.requestBody, {
-      required: true,
-      content: {
-        'application/json': {
-          schema: {
-            type: 'object',
-            properties: {
-              type: { type: 'string', enum: ['delivered', 'bounced'] },
-              messageId: { type: 'string' },
-              occurredAt: { type: 'string' },
-            },
-            required: ['type', 'messageId', 'occurredAt'],
-            additionalProperties: false,
-          },
-        },
+    const { content } = document.paths['/api/v1/webhooks/mail']!.post!.requestBody!
+
+    assert.includeMembers(Object.keys(content), ['application/json', 'multipart/form-data'])
+    assert.deepEqual(content['application/json']!.schema, {
+      type: 'object',
+      properties: {
+        type: { type: 'string', enum: ['delivered', 'bounced'] },
+        messageId: { type: 'string' },
+        occurredAt: { type: 'string' },
       },
+      required: ['type', 'messageId', 'occurredAt'],
+      additionalProperties: false,
     })
   })
 

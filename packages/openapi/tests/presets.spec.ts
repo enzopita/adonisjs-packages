@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
-import { generateInCopy, generatePlayground, json, object } from './support/playground.ts'
+import { generateInCopy, generatePlayground, json, object, run } from './support/playground.ts'
 
 async function generateWithErrors(errors: string, imports = '') {
   const { dir, output } = await generateInCopy(async copy => {
@@ -21,7 +21,7 @@ async function generateWithErrors(errors: string, imports = '') {
   const raw = await readFile(join(dir, 'openapi.json'), 'utf8')
   const document: OpenApiDocument = JSON.parse(raw)
 
-  return { raw, document, output }
+  return { dir, raw, document, output }
 }
 
 test.group('openapi:generate with the presets of first-party packages', () => {
@@ -41,7 +41,12 @@ test.group('openapi:generate with the presets of first-party packages', () => {
 
     assert.deepEqual(
       json(document.paths['/api/v1/auth/login']!.post!.responses['400']),
-      object({ errors: { type: 'array', items: object({ message: { type: 'string' } }) } }),
+      object({
+        errors: {
+          type: 'array',
+          items: object({ message: { type: 'string' } }),
+        },
+      }),
     )
   })
 
@@ -132,6 +137,66 @@ test.group('openapi:generate with the presets of first-party packages', () => {
       '500',
     ])
     assert.notInclude(output, 'OA-E')
+  })
+
+  test('reads an array written with as const and keeps the playground typechecking', async ({
+    assert,
+  }) => {
+    const { dir, document, output } = await generateWithErrors(
+      "  errors: { throwers: { 'ally.user': allyFailures } },\n",
+      [
+        "import { errors as allyErrors } from '@adonisjs/ally'",
+        'const allyFailures = [allyErrors.E_OAUTH_STATE_MISMATCH, allyErrors.E_OAUTH_MISSING_CODE] as const',
+        '',
+      ].join('\n'),
+    )
+
+    assert.sameMembers(Object.keys(document.paths['/oauth/github/callback']!.get!.responses), [
+      '200',
+      '400',
+      '500',
+    ])
+    assert.notInclude(output, 'OA-E')
+
+    await run('node', ['ace', 'codegen'], { cwd: dir })
+    await run('node_modules/.bin/tsc', ['--noEmit'], { cwd: dir })
+  })
+
+  test('documents the classes of a spread and points OA-E001 at the right item', async ({
+    assert,
+  }) => {
+    const { document, output } = await generateWithErrors(
+      '  errors: { throwers: { verifyCredentials: [...paid, ...[...limits], Error] } },\n',
+      [
+        "import PlanLimitException from '#exceptions/plan_limit_exception'",
+        "import MaintenanceException from '#exceptions/maintenance_exception'",
+        'const paid = [PlanLimitException] as const',
+        'const limits = [MaintenanceException]',
+        '',
+      ].join('\n'),
+    )
+
+    assert.properties(document.paths['/api/v1/auth/login']!.post!.responses, ['402', '503'])
+    assert.include(output, "errors.throwers['verifyCredentials'][2]: the status of Error")
+  })
+
+  test('warns on a spread it cannot resolve instead of naming a wrong item', async ({ assert }) => {
+    const { document, output } = await generateWithErrors(
+      "  errors: { throwers: { 'ally.user': [allyErrors.E_OAUTH_STATE_MISMATCH, ...more(), Error] } },\n",
+      [
+        "import { errors as allyErrors } from '@adonisjs/ally'",
+        'function more() { return [allyErrors.E_OAUTH_MISSING_CODE] }',
+        '',
+      ].join('\n'),
+    )
+
+    assert.property(document.paths['/oauth/github/callback']!.get!.responses, '400')
+    assert.include(
+      output,
+      "errors.throwers['ally.user'] spreads an array the generator cannot read",
+    )
+    assert.include(output, "errors.throwers['ally.user'][2]: the status of Error")
+    assert.notInclude(output, "errors.throwers['ally.user'][1]")
   })
 
   test('warns on an empty array and suggests false', async ({ assert }) => {

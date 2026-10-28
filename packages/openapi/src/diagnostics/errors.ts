@@ -18,6 +18,20 @@ export function entryStatusUnreadable(
   }
 }
 
+export function spreadUnreadable(
+  kind: ErrorsKind,
+  key: string,
+  location: SourceLocation,
+): Diagnostic {
+  return {
+    code: 'OA-E001',
+    severity: 'warning',
+    message: `errors.${kind}['${key}'] spreads an array the generator cannot read, the classes it adds are ignored`,
+    fix: 'spread an array literal or a const that holds one, or write the classes in the entry',
+    location,
+  }
+}
+
 export function ownBodyUndeclared(name: string): Diagnostic {
   return {
     code: 'OA-E002',

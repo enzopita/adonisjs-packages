@@ -1,39 +1,24 @@
-import { extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { Worker } from 'node:worker_threads'
 import type { ApplicationService } from '@adonisjs/core/types'
 import type { Router } from '@adonisjs/core/http'
 import { namedErrors } from '../analysis/errors/named_errors.ts'
 import { locateFunctions, parsedScripts } from '../routes/function_location.ts'
 import type { Diagnostic, GeneratedDocument, OpenApiConfig } from '../types.ts'
+import { programCache } from '../program/program_cache.ts'
 import type { WorkerInput } from './document_request.ts'
+import { startRunner } from './document_runner.ts'
 import { operationIdFor } from './operation_id.ts'
 import { validatorSchemas } from './validator_schemas.ts'
 
-// The build compiles each source next to the others, so the worker has the extension of this file.
-const workerFile = new URL(`./document_worker${extname(import.meta.url)}`, import.meta.url)
-
 /**
- * Starts parsing the app's program on a worker thread, which reads the document's types once the
+ * Starts parsing the app's program off the main thread, which reads the document's types once the
  * app it was started for gives its routes to `generate()`. Starting it before the app boots lets
- * the TypeScript compiler parse the app's sources while the app boots.
+ * the TypeScript compiler parse the app's sources while the app boots; the program cache, when it
+ * holds the files of an earlier run, spares most of that parse.
  */
 export function prepareDocument(appRoot: string) {
-  const worker = new Worker(workerFile, { workerData: appRoot })
-
-  // Waited for only while `generate()` runs: an app that fails to boot exits without it.
-  worker.unref()
-
-  const result = new Promise<GeneratedDocument>((resolve, reject) => {
-    worker.once('message', resolve)
-    worker.once('error', reject)
-    worker.once('exit', code =>
-      reject(new Error(`openapi: the document worker exited with code ${code}`)),
-    )
-  })
-
-  // Read by `generate()` only: a failure before it, which stops the worker, is the one it throws.
-  result.catch(() => undefined)
+  const cache = programCache(appRoot)
+  const runner = startRunner(appRoot, cache)
 
   return {
     async generate(
@@ -89,12 +74,16 @@ export function prepareDocument(appRoot: string) {
           located,
         }
 
-        worker.ref()
-        worker.postMessage(input)
+        runner.ref()
+        runner.post(input)
 
-        return await result
+        const { generated, cacheInput } = await runner.answer
+
+        if (cache && cacheInput) cache.rebuild(cacheInput)
+
+        return generated
       } finally {
-        await worker.terminate()
+        await runner.stop()
       }
     },
   }

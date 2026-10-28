@@ -1,4 +1,5 @@
 import type { prepareProgram } from '../program/create_program.ts'
+import type { ProgramInput } from '../program/parsed_files.ts'
 import type { FunctionLocation } from '../routes/function_location.ts'
 import type { RouteOperation } from '../routes/route_operation.ts'
 import type { GeneratedDocument } from '../types.ts'
@@ -17,10 +18,18 @@ export type WorkerInput = Omit<DocumentInput, 'routes'> & {
   located: { location?: FunctionLocation; failures: Error[] }[]
 }
 
+/**
+ * The document, and what to rebuild the program cache from when it is missing or stale.
+ */
+export interface WorkerAnswer {
+  generated: GeneratedDocument
+  cacheInput: ProgramInput | undefined
+}
+
 export function answer(
   { routes, located, ...input }: WorkerInput,
   prepared: ReturnType<typeof prepareProgram>,
-): GeneratedDocument {
+): WorkerAnswer {
   // A function cannot reach another thread: a stand-in takes the place of each one.
   const standIns = located.map((): Function => () => {})
   const indexOf = new Map(standIns.map((fn, index) => [fn, index]))
@@ -40,7 +49,7 @@ export function answer(
     return { found, failures }
   }
 
-  return documentOf(
+  const generated = documentOf(
     {
       ...input,
       routes: routes.map(route => ({
@@ -54,4 +63,6 @@ export function answer(
     prepared,
     locate,
   )
+
+  return { generated, cacheInput: prepared.cacheInput }
 }

@@ -1,5 +1,5 @@
 import ts from 'typescript'
-import { join, relative, sep } from 'node:path'
+import { join, relative } from 'node:path'
 import { existsSync } from 'node:fs'
 import { property } from '../analysis/symbols.ts'
 import { ConfiguredErrors } from '../analysis/errors/configured_errors.ts'
@@ -53,15 +53,14 @@ export interface AppTypes {
  * `configFile` is `config/openapi.ts`, whose type names the classes of `errors` when it exists.
  */
 export function readApp(
-  createProgram: ReturnType<typeof prepareProgram>,
+  prepared: ReturnType<typeof prepareProgram>,
   appRoot: string,
   routes: RouteOperation[],
   errors: NamedErrors,
   configFile?: string,
   locateInline?: typeof locateFunctions,
 ): AppTypes {
-  // TypeScript names files with `/`, and the compiler host matches this one by string.
-  const entryFile = join(appRoot, '.adonisjs/openapi/routes.ts').split(sep).join('/')
+  const { entryFile } = prepared
 
   const source = renderEntry(
     entryFile,
@@ -71,7 +70,7 @@ export function readApp(
     configFile && existsSync(configFile) ? configFile : undefined,
   )
 
-  const { program, options, dataFile } = createProgram(entryFile, source)
+  const { program, options, dataFile } = prepared.create(source)
   const checker = program.getTypeChecker()
   const entry = program.getSourceFile(entryFile)!
   const types = readEntry(checker, entry)

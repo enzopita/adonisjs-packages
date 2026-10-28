@@ -47,10 +47,10 @@ export function documentOf(
     vine,
     diagnostics,
   }: DocumentInput,
-  createProgram: ReturnType<typeof prepareProgram>,
+  prepared: ReturnType<typeof prepareProgram>,
   locateInline?: typeof locateFunctions,
 ): GeneratedDocument {
-  const types = readApp(createProgram, appRoot, routes, config.errors, configFile, locateInline)
+  const types = readApp(prepared, appRoot, routes, config.errors, configFile, locateInline)
   const routeIndex = new Map(routes.map((route, index) => [route, index]))
 
   const paths: OpenApiDocument['paths'] = {}

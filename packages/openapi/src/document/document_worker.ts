@@ -48,17 +48,17 @@ registerHooks({
 const { prepareProgram: prepare } = await import('../program/create_program.ts')
 const { documentOf } = await import('./document.ts')
 
-let createProgram: ReturnType<typeof prepareProgram> | undefined
+let prepared: ReturnType<typeof prepareProgram> | undefined
 let failure: unknown
 
 try {
-  createProgram = prepare(workerData)
+  prepared = prepare(workerData)
 } catch (error) {
   failure = error
 }
 
 parentPort!.once('message', ({ routes, located, ...input }: WorkerInput) => {
-  if (!createProgram) throw failure
+  if (!prepared) throw failure
 
   // A function cannot reach another thread: a stand-in takes the place of each one.
   const standIns = located.map((): Function => () => {})
@@ -90,7 +90,7 @@ parentPort!.once('message', ({ routes, located, ...input }: WorkerInput) => {
         })),
       })),
     },
-    createProgram,
+    prepared,
     locate,
   )
 

@@ -1,5 +1,6 @@
 import { Session } from 'node:inspector'
 import { SourceMap } from 'node:module'
+import { runInThisContext } from 'node:vm'
 import ts from 'typescript'
 import { test } from '@japa/runner'
 import { locateFunctions } from '../src/routes/function_location.ts'
@@ -51,6 +52,17 @@ test.group('locateFunctions', group => {
     const { failure } = locateFunctions([() => {}])
 
     assert.equal(failure?.message, 'mapping failure')
+  })
+
+  test('says why when a source map is unreadable', ({ assert }) => {
+    const fn = runInThisContext('(() => {})\n//# sourceMappingURL=data:application/json,not-json', {
+      filename: 'file:///unreadable-map.js',
+    })
+
+    const { found, failure } = locateFunctions([fn])
+
+    assert.equal(found.size, 0)
+    assert.instanceOf(failure, SyntaxError)
   })
 
   test('reports no failure when every function is located', ({ assert }) => {

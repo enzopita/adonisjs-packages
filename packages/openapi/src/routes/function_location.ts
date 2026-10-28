@@ -19,20 +19,14 @@ const HANDLE = Symbol.for('@enzopita/adonisjs-openapi:locate')
 function sourceMapOf({ url, sourceMapURL }: Script): SourceMapPayload | undefined {
   if (!sourceMapURL) return undefined
 
-  try {
-    if (!sourceMapURL.startsWith('data:'))
-      return JSON.parse(readFileSync(new URL(sourceMapURL, url), 'utf8'))
+  if (!sourceMapURL.startsWith('data:'))
+    return JSON.parse(readFileSync(new URL(sourceMapURL, url), 'utf8'))
 
-    const [header = '', data = ''] = sourceMapURL.split(',', 2)
+  const [header = '', data = ''] = sourceMapURL.split(',', 2)
 
-    return JSON.parse(
-      header.endsWith(';base64')
-        ? Buffer.from(data, 'base64').toString()
-        : decodeURIComponent(data),
-    )
-  } catch {
-    return undefined
-  }
+  return JSON.parse(
+    header.endsWith(';base64') ? Buffer.from(data, 'base64').toString() : decodeURIComponent(data),
+  )
 }
 
 function toPath(url: string) {
@@ -60,8 +54,8 @@ function original(script: Script, line: number, column: number): FunctionLocatio
 /**
  * Where V8 says each function was declared, mapped through the source map of its script. A bound
  * function is located by the function it binds. A function V8 has no script with a file for, such
- * as a native one, has no location. A failure of the inspector or of the mapping ends the lookup
- * and comes back with the locations found so far.
+ * as a native one, has no location. A failure of the inspector, or of reading or applying a source
+ * map, ends the lookup and comes back with the locations found so far.
  */
 export function locateFunctions(functions: Function[]) {
   const found = new Map<Function, FunctionLocation>()

@@ -1,3 +1,4 @@
+import { enableCompileCache } from 'node:module'
 import { BaseCommand, flags } from '@adonisjs/core/ace'
 import { defineConfig } from '../src/define_config.ts'
 import type { Diagnostic, OpenApiConfig } from '../src/types.ts'
@@ -17,6 +18,8 @@ export abstract class OpenApiCommand extends BaseCommand {
    * `strict` makes every warning an error here only: `generateDocument()` keeps the severity of each.
    */
   protected async generate(options: { strict?: boolean } = {}) {
+    // Every run loads the same app and the 9 MB TypeScript compiler: V8 compiles them once.
+    enableCompileCache()
     this.app.setEnvironment('web')
     this.app.setMode('warmup')
     await this.app.boot()

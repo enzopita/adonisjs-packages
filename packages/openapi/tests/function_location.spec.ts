@@ -25,10 +25,10 @@ test.group('locateFunctions', group => {
   test('locates nothing without an inspector, and says why', ({ assert }) => {
     failConnect()
 
-    const { found, failure } = locateFunctions([() => {}])
+    const { found, failures } = locateFunctions([() => {}])
 
     assert.equal(found.size, 0)
-    assert.equal(failure?.message, 'Inspector is not available')
+    assert.equal(failures[0]?.message, 'Inspector is not available')
   })
 
   test('locates nothing when the inspector protocol fails, and says why', ({ assert }) => {
@@ -38,10 +38,10 @@ test.group('locateFunctions', group => {
       if (callback instanceof Function) callback(new Error('protocol failure'))
     }
 
-    const { found, failure } = locateFunctions([() => {}])
+    const { found, failures } = locateFunctions([() => {}])
 
     assert.equal(found.size, 0)
-    assert.equal(failure?.message, 'protocol failure')
+    assert.equal(failures[0]?.message, 'protocol failure')
   })
 
   test('says why when the mapping of a location throws', ({ assert }) => {
@@ -49,9 +49,9 @@ test.group('locateFunctions', group => {
       throw new Error('mapping failure')
     }
 
-    const { failure } = locateFunctions([() => {}])
+    const { failures } = locateFunctions([() => {}])
 
-    assert.equal(failure?.message, 'mapping failure')
+    assert.equal(failures[0]?.message, 'mapping failure')
   })
 
   test('says why when a source map is unreadable', ({ assert }) => {
@@ -59,17 +59,34 @@ test.group('locateFunctions', group => {
       filename: 'file:///unreadable-map.js',
     })
 
-    const { found, failure } = locateFunctions([fn])
+    const { found, failures } = locateFunctions([fn])
 
     assert.equal(found.size, 0)
-    assert.instanceOf(failure, SyntaxError)
+    assert.instanceOf(failures[0], SyntaxError)
+  })
+
+  test('an unreadable source map fails only the functions of its script', ({ assert }) => {
+    const bad = runInThisContext(
+      '(() => {})\n//# sourceMappingURL=data:application/json,not-json',
+      {
+        filename: 'file:///bad-map.js',
+      },
+    )
+
+    const good = runInThisContext('(() => {})', { filename: 'file:///good.js' })
+
+    const { found, failures } = locateFunctions([bad, good])
+
+    assert.isFalse(found.has(bad))
+    assert.deepEqual(found.get(good), { file: '/good.js', line: 0, column: 1 })
+    assert.lengthOf(failures, 1)
   })
 
   test('reports no failure when every function is located', ({ assert }) => {
-    const { found, failure } = locateFunctions([() => {}])
+    const { found, failures } = locateFunctions([() => {}])
 
     assert.equal(found.size, 1)
-    assert.isUndefined(failure)
+    assert.lengthOf(failures, 0)
   })
 
   test('reports a failed lookup once, and still answers', ({ assert }) => {

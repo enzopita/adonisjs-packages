@@ -54,14 +54,15 @@ function original(script: Script, line: number, column: number): FunctionLocatio
 /**
  * Where V8 says each function was declared, mapped through the source map of its script. A bound
  * function is located by the function it binds. A function V8 has no script with a file for, such
- * as a native one, has no location. A failure of the inspector, or of reading or applying a source
- * map, ends the lookup and comes back with the locations found so far.
+ * as a native one, has no location. A failure of the inspector ends the lookup and comes back with
+ * the locations found so far. A source map that cannot be read or applied fails only the functions
+ * of its script, and the lookup goes on.
  */
 export function locateFunctions(functions: Function[]) {
   const found = new Map<Function, FunctionLocation>()
-  let failure: Error | undefined
+  const failures: Error[] = []
 
-  if (!functions.length) return { found, failure }
+  if (!functions.length) return { found, failures }
 
   const session = new Session()
   const scripts = new Map<string, Script>()
@@ -113,16 +114,21 @@ export function locateFunctions(functions: Function[]) {
       )?.value?.value
 
       const script = location && scripts.get(location.scriptId)
-      const mapped = script && original(script, location.lineNumber, location.columnNumber ?? 0)
 
-      if (mapped) found.set(fn, mapped)
+      try {
+        const mapped = script && original(script, location.lineNumber, location.columnNumber ?? 0)
+
+        if (mapped) found.set(fn, mapped)
+      } catch (error) {
+        failures.push(error instanceof Error ? error : new Error(String(error)))
+      }
     }
   } catch (error) {
-    failure = error instanceof Error ? error : new Error(String(error))
+    failures.push(error instanceof Error ? error : new Error(String(error)))
   } finally {
     Reflect.deleteProperty(globalThis, HANDLE)
     session.disconnect()
   }
 
-  return { found, failure }
+  return { found, failures }
 }

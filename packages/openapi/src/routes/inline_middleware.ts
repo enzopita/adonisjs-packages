@@ -217,11 +217,17 @@ export function inlineMiddleware(program: ts.Program, middleware: InlineMiddlewa
 
   const locationOf = (fn: Function) => {
     if (!locations) {
-      const { found, failure } = locateFunctions(
+      const { found, failures } = locateFunctions(
         middleware.flatMap(({ source, fn }) => (bySource(source).kind === 'missing' ? [fn] : [])),
       )
 
-      if (failure) diagnostics.push(inlineLookupFailed(failure.message))
+      const [first] = failures
+
+      if (first) {
+        const more = failures.length > 1 ? `, and ${failures.length - 1} more` : ''
+
+        diagnostics.push(inlineLookupFailed(`${first.message}${more}`))
+      }
 
       locations = found
     }

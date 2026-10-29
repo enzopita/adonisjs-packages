@@ -53,9 +53,11 @@ export function programCache(appRoot: string): ProgramCache | undefined {
   if (!fingerprint) return undefined
 
   const blob = join(dir, `program-${fingerprint}.blob`)
-  const exists = existsSync(blob)
+  const failed = failedLately(blob)
+  const exists = !failed && existsSync(blob)
 
-  log('program cache: %s %s', blob, exists ? 'found' : 'missing')
+  if (failed) log('program cache: %s failed lately', blob)
+  else log('program cache: %s %s', blob, exists ? 'found' : 'missing')
 
   return {
     blob,
@@ -63,7 +65,7 @@ export function programCache(appRoot: string): ProgramCache | undefined {
     rebuild(input) {
       const interactive = process.stdout.isTTY && !process.env.CI
 
-      if (!named && !interactive) return
+      if ((!named && !interactive) || failedLately(blob)) return
 
       try {
         mkdirSync(dir, { recursive: true })
@@ -88,10 +90,23 @@ export function programCache(appRoot: string): ProgramCache | undefined {
     discard() {
       try {
         rmSync(blob, { force: true })
+        writeFileSync(`${blob}.failed`, '')
       } catch {
         // Left for the next build to replace.
       }
     },
+  }
+}
+
+// A snapshot that failed to build or to start is neither started nor rebuilt for a day, so that a
+// failure that lasts costs a run nothing.
+function failedLately(blob: string) {
+  try {
+    const marker = statSync(`${blob}.failed`, { throwIfNoEntry: false })
+
+    return marker !== undefined && Date.now() - marker.mtimeMs < 24 * 60 * 60_000
+  } catch {
+    return true
   }
 }
 

@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout } from 'node:timers/promises'
@@ -154,4 +154,28 @@ test.group('openapi:generate with the program cache', group => {
     assert.isTrue(broken.document === golden)
     assert.equal(broken.output, off.output)
   }).timeout(120_000)
+
+  test('a snapshot that failed is neither started nor rebuilt for a day', async ({ assert }) => {
+    const [marker] = (await readdir(cache)).filter(name => name.endsWith('.failed'))
+
+    assert.exists(marker)
+
+    const backedOff = await generate(dir, cache)
+
+    assert.include(backedOff.log, 'failed lately')
+    assert.notInclude(backedOff.log, 'building')
+    assert.isTrue(backedOff.document === golden)
+    assert.deepEqual(await readdir(cache), [marker])
+
+    const dayAgo = new Date(Date.now() - 25 * 60 * 60_000)
+    await utimes(join(cache, marker!), dayAgo, dayAgo)
+
+    const retried = await generate(dir, cache)
+
+    assert.include(retried.log, 'missing')
+    assert.include(retried.log, 'building')
+    assert.isTrue(retried.document === golden)
+
+    await built(cache)
+  }).timeout(240_000)
 })

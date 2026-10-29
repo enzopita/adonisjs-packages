@@ -1,5 +1,13 @@
 import { spawnSync } from 'node:child_process'
-import { closeSync, openSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import {
+  closeSync,
+  openSync,
+  readdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { setPriority } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 
@@ -32,8 +40,8 @@ function acquire() {
   }
 }
 
-// Other snapshots are of another Node.js or TypeScript, which no run of this one reads, and files
-// left by builds that were stopped.
+// Other snapshots are of another Node.js or TypeScript, which no run of this one reads, failure
+// markers are of builds that one which worked replaces, and the rest are left by stopped builds.
 function prune() {
   const dir = dirname(blob)
 
@@ -41,7 +49,7 @@ function prune() {
     const file = join(dir, name)
 
     const stale =
-      /^program-[0-9a-f]{16}\.blob$/.test(name) ||
+      /^program-[0-9a-f]{16}\.blob(\.failed)?$/.test(name) ||
       (/\.(tmp|json)$/.test(name) &&
         Date.now() - (statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0) > STALE_LOCK_MS)
 
@@ -63,6 +71,8 @@ try {
       if (status === 0) {
         renameSync(temporary, blob)
         prune()
+      } else {
+        writeFileSync(`${blob}.failed`, '')
       }
     } finally {
       rmSync(lock, { force: true })

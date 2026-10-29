@@ -23,8 +23,8 @@ export interface ProgramCache {
   blob: string
   exists: boolean
   /**
-   * Rebuilds the snapshot from `input` in a detached, low-priority process, when this run is
-   * interactive (a terminal, outside CI) or the cache folder was named.
+   * Rebuilds the snapshot from `input` in a detached, low-priority process, outside CI or when the
+   * cache folder was named.
    */
   rebuild(input: ProgramInput): void
   discard(): void
@@ -65,9 +65,7 @@ export function programCache(appRoot: string): ProgramCache | undefined {
     blob,
     exists,
     rebuild(input) {
-      const interactive = process.stdout.isTTY && !process.env.CI
-
-      if ((!named && !interactive) || failedLately(blob)) return
+      if ((!named && process.env.CI) || failedLately(blob)) return
 
       try {
         mkdirSync(dir, { recursive: true })

@@ -15,6 +15,11 @@ export interface FunctionLocation {
 
 type Script = Pick<Debugger.ScriptParsedEventDataType, 'url' | 'sourceMapURL'>
 
+/**
+ * The scripts V8 had parsed when they were read, by id, or why they could not be read.
+ */
+export type Scripts = Map<string, Script> | Error
+
 const HANDLE = Symbol.for('@enzopita/adonisjs-openapi:locate')
 
 function sourceMapOf({ url, sourceMapURL }: Script): SourceMapPayload | undefined {
@@ -54,20 +59,45 @@ function original(script: Script, line: number, column: number): FunctionLocatio
 }
 
 /**
+ * `Debugger.enable` reports every script V8 has parsed, and costs as much as their sources weigh.
+ * A function's script is parsed before the function exists, so this can run long before the lookup.
+ */
+export function parsedScripts(): Scripts {
+  const session = new Session()
+  const scripts = new Map<string, Script>()
+
+  session.on('Debugger.scriptParsed', ({ params }) => scripts.set(params.scriptId, params))
+
+  try {
+    session.connect()
+    session.post('Debugger.enable')
+
+    return scripts
+  } catch (error) {
+    return error instanceof Error ? error : new Error(String(error))
+  } finally {
+    session.disconnect()
+  }
+}
+
+/**
  * Where V8 says each function was declared, mapped through the source map of its script. A bound
  * function is located by the function it binds. A function V8 has no script with a file for, such
  * as a native one, has no location. A failure of the inspector ends the lookup and comes back with
  * the locations found so far. A source map that cannot be read or applied fails only the functions
  * of its script, and the lookup goes on.
  */
-export function locateFunctions(functions: Function[]) {
+export function locateFunctions(functions: Function[], parsed?: Scripts) {
   const found = new Map<Function, FunctionLocation>()
   const failures: Error[] = []
 
   if (!functions.length) return { found, failures }
 
+  const scripts = parsed ?? parsedScripts()
+
+  if (scripts instanceof Error) return { found, failures: [scripts] }
+
   const session = new Session()
-  const scripts = new Map<string, Script>()
 
   // A session on the thread it inspects calls back before `post` returns.
   const remote = () => {
@@ -96,11 +126,8 @@ export function locateFunctions(functions: Function[]) {
     return properties
   }
 
-  session.on('Debugger.scriptParsed', ({ params }) => scripts.set(params.scriptId, params))
-
   try {
     session.connect()
-    session.post('Debugger.enable')
 
     for (const fn of functions) {
       Reflect.set(globalThis, HANDLE, fn)

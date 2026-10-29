@@ -2,7 +2,10 @@
   "extends": "@adonisjs/tsconfig/tsconfig.package.json",
   "compilerOptions": {
     "rootDir": "./",
-    "outDir": "./build"
+    "outDir": "./build",
+    // The builder of the program cache's snapshot, src/program/program_snapshot.cjs.
+    "allowJs": true,
+    "checkJs": true
   },
   // The app tests/fixtures/broken_app overlays on a copy of the playground, which resolves its imports.
   "exclude": ["build", "node_modules", "tests/fixtures"]

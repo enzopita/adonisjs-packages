@@ -82,6 +82,21 @@ The glob lists the sources of the document, `adonisrc.ts` for the named schemas,
 
 When the hook fails, run `node ace openapi:generate`, commit `output`, and push again.
 
+### Cache the parsed program
+
+Both commands spend most of their time parsing the app's sources and the `.d.ts` files of its dependencies. After a run outside CI, a background process with low priority saves the parsed files as a V8 startup snapshot of about 100 MB in `node_modules/.cache/adonisjs-openapi`. The next run starts from the snapshot and parses only the files that changed since then, which saves about a second on a small app. The document and the diagnostics are the same with or without the cache.
+
+- A run in CI (the `CI` environment variable is set) reads the cache but does not write it.
+- The snapshot is rebuilt when more than an eighth of the source text changed, such as after a dependency upgrade, and after an upgrade of Node.js or TypeScript.
+- A missing, stale or broken cache is skipped, and the run parses every file. A snapshot that fails to build or to start is neither used nor rebuilt for a day.
+
+The `ADONISJS_OPENAPI_CACHE` environment variable changes this:
+
+- `false` turns the cache off.
+- An absolute path keeps the cache in that folder, which several apps can share. Runs in CI then write it too, for example to a folder that CI keeps between jobs.
+
+`NODE_DEBUG=openapi` prints whether a run started from the cache and how many files it parsed.
+
 ## Configure
 
 ```ts

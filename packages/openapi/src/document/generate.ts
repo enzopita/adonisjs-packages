@@ -1,133 +1,98 @@
 import { fileURLToPath } from 'node:url'
 import type { ApplicationService } from '@adonisjs/core/types'
 import type { Router } from '@adonisjs/core/http'
-import { operationDocs, type OperationDocs } from '../analysis/tags/operation_docs.ts'
-import { duplicateOperationId } from '../diagnostics/operation.ts'
-import { lucidModel, noJsonSchema } from '../diagnostics/route.ts'
-import { readApp } from '../program/app_types.ts'
-import { collectRoutes } from '../routes/collect_routes.ts'
-import type { Diagnostic, GeneratedDocument, OpenApiConfig, OpenApiDocument } from '../types.ts'
-import { errorCodes } from './error_codes.ts'
-import { operationFor } from './operation.ts'
+import { namedErrors } from '../analysis/errors/named_errors.ts'
+import { locateFunctions, parsedScripts } from '../routes/function_location.ts'
+import type { Diagnostic, GeneratedDocument, OpenApiConfig } from '../types.ts'
+import { programCache } from '../program/program_cache.ts'
+import type { WorkerInput } from './document_request.ts'
+import { startRunner } from './document_runner.ts'
 import { operationIdFor } from './operation_id.ts'
-import { operationRules } from './operation_rules.ts'
-import { ResponseComponents } from './response_components.ts'
-import { responsesFor } from './responses/responses.ts'
-import { securityFor } from './security.ts'
-import { bodyFields, mergeSchemas, validatorSchemas } from './validator_schemas.ts'
+import { validatorSchemas } from './validator_schemas.ts'
 
-const NO_DOCS: OperationDocs = { meta: {}, throws: [], responses: [], examples: [], problems: [] }
+/**
+ * Starts parsing the app's program off the main thread, which reads the document's types once the
+ * app it was started for gives its routes to `generate()`. Starting it before the app boots lets
+ * the TypeScript compiler parse the app's sources while the app boots; the program cache, when it
+ * holds the files of an earlier run, spares most of that parse.
+ */
+export function prepareDocument(appRoot: string) {
+  const cache = programCache(appRoot)
+  const runner = startRunner(appRoot, cache)
+
+  return {
+    async generate(
+      app: ApplicationService,
+      router: Router,
+      config: OpenApiConfig,
+    ): Promise<GeneratedDocument> {
+      try {
+        const diagnostics: Diagnostic[] = []
+        const { collectRoutes } = await import('../routes/collect_routes.ts')
+        const routes = await collectRoutes(appRoot, router, config, diagnostics)
+        const vine = await validatorSchemas(app, routes, diagnostics)
+
+        const unique = [
+          ...new Set(routes.flatMap(route => route.inlineMiddleware.map(({ fn }) => fn))),
+        ]
+
+        const scripts = unique.length ? parsedScripts() : undefined
+
+        // Each function alone, for the worker to tell the failures of those it looks up.
+        const located = unique.map(fn => {
+          const { found, failures } = locateFunctions([fn], scripts)
+
+          return { location: found.get(fn), failures }
+        })
+
+        // In the order the document reads them, for an `operationId()` that keeps count.
+        const operationIds = new Map(
+          [...Map.groupBy(routes, route => route.name).values()]
+            .flat()
+            .map(route => [
+              route,
+              route.methods.map(method => operationIdFor(route, method, config.operationId)),
+            ]),
+        )
+
+        const { routes: _, operationId: __, errors, ...rest } = config
+
+        const input: WorkerInput = {
+          appRoot,
+          configFile: app.configPath('openapi.ts'),
+          routes: routes.map(route => ({
+            ...route,
+            inlineMiddleware: route.inlineMiddleware.map(({ fn, ...entry }) => ({
+              ...entry,
+              fn: unique.indexOf(fn),
+            })),
+          })),
+          operationIds: routes.map(route => operationIds.get(route)!),
+          config: { ...rest, errors: namedErrors(errors) },
+          vine,
+          diagnostics,
+          located,
+        }
+
+        runner.ref()
+        runner.post(input)
+
+        const { generated, cacheInput } = await runner.answer
+
+        if (cache && cacheInput) cache.rebuild(cacheInput)
+
+        return generated
+      } finally {
+        await runner.stop()
+      }
+    },
+  }
+}
 
 export async function generateDocument(
   app: ApplicationService,
   router: Router,
   config: OpenApiConfig,
 ): Promise<GeneratedDocument> {
-  const diagnostics: Diagnostic[] = []
-  const appRoot = fileURLToPath(app.appRoot)
-  const routes = await collectRoutes(appRoot, router, config, diagnostics)
-  const types = readApp(appRoot, routes, config.errors, app.configPath('openapi.ts'))
-  const vine = await validatorSchemas(app, routes, diagnostics)
-
-  const paths: OpenApiDocument['paths'] = {}
-  const provenance: GeneratedDocument['provenance'] = {}
-  const components = new ResponseComponents(appRoot)
-  const operationIds = new Map<string, string>()
-
-  // A route with an optional param has a path without it too, which shares everything else.
-  for (const [name, variants] of Map.groupBy(routes, route => route.name)) {
-    const route = variants[0]!
-    const { request, response } = types.routeTypes(name)
-    const input = request && mergeSchemas(vine.get(name), types.schemas.convert(request))
-    const fields = input && bodyFields(input)
-    const controller = types.handler(route)
-
-    const docs = controller
-      ? operationDocs(types.tags, controller.declaration, controller.method)
-      : NO_DOCS
-
-    diagnostics.push(
-      ...docs.problems.map((problem): Diagnostic => ({ ...problem, route: name })),
-      ...operationRules(
-        name,
-        docs.meta,
-        config,
-        controller && types.locate(controller.method.name),
-      ),
-    )
-
-    const { secured, security } = securityFor(route, config.security.middleware)
-
-    const { responses, sources } = responsesFor(route, types, controller, response, docs, secured, {
-      diagnostics,
-      components,
-    })
-
-    provenance[name] = sources
-
-    for (const variant of variants) {
-      const methods = paths[variant.path] ?? {}
-      paths[variant.path] = methods
-
-      for (const method of variant.methods) {
-        const operationId = operationIdFor(variant, method, config.operationId)
-        const first = operationIds.get(operationId)
-
-        if (first === undefined)
-          operationIds.set(operationId, `${method.toUpperCase()} ${variant.path}`)
-        else diagnostics.push(duplicateOperationId(name, operationId, first))
-
-        methods[method] = operationFor(variant, method, types, {
-          operationId,
-          meta: docs.meta,
-          requestBody: docs.requestBody,
-          input,
-          fields,
-          responses,
-          security,
-        })
-      }
-    }
-  }
-
-  diagnostics.push(
-    ...types.exceptions.diagnostics,
-    ...types.errors.diagnostics,
-    ...types.inlineDiagnostics,
-  )
-
-  for (const type of types.schemas.unsupported) diagnostics.push(noJsonSchema(type))
-
-  for (const model of types.schemas.models) diagnostics.push(lucidModel(model))
-
-  const responses = components.responses()
-
-  const document: OpenApiDocument = {
-    openapi: '3.1.0',
-    info: config.document.info,
-    paths,
-    components: {
-      schemas: types.schemas.components,
-      ...(Object.keys(responses).length > 0 && { responses }),
-      securitySchemes: config.security.schemes,
-    },
-  }
-
-  const codes = errorCodes(document)
-
-  if (codes.length && !('ErrorCode' in document.components.schemas))
-    document.components.schemas = {
-      ...document.components.schemas,
-      ErrorCode: { type: 'string', enum: codes },
-    }
-
-  if (config.document.servers.length) document.servers = config.document.servers
-
-  if (config.document.tags.length) document.tags = config.document.tags
-
-  return {
-    document,
-    diagnostics,
-    provenance,
-  }
+  return prepareDocument(fileURLToPath(app.appRoot)).generate(app, router, config)
 }

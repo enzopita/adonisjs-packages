@@ -14,7 +14,8 @@ import {
   unmatchedKey,
   type ErrorsKind,
 } from '../../diagnostics/errors.ts'
-import type { Diagnostic, ErrorsConfig, ResponseSource, SourceLocation } from '../../types.ts'
+import type { Diagnostic, ResponseSource, SourceLocation } from '../../types.ts'
+import type { NamedErrors } from './named_errors.ts'
 
 /**
  * An exception an `errors.throwers` or `errors.middleware` entry names, with its class as the
@@ -39,7 +40,7 @@ function isList<T>(value: T | readonly T[] | false): value is readonly T[] {
  */
 export class ConfiguredErrors {
   #checker: ts.TypeChecker
-  #errors: ErrorsConfig
+  #errors: NamedErrors
   #config?: ts.Type
   #exceptions: ExceptionResponses
   #creators: PresetException[]
@@ -51,7 +52,7 @@ export class ConfiguredErrors {
 
   constructor(
     checker: ts.TypeChecker,
-    errors: ErrorsConfig,
+    errors: NamedErrors,
     config: ts.Type | undefined,
     exceptions: ExceptionResponses,
     location: (node: ts.Node) => SourceLocation,

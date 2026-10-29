@@ -1,0 +1,12 @@
+{
+  "small": {
+    "document": "d1c4edfbe387f602",
+    "output": "b17c4c98b3cfd0b6",
+    "operations": 60
+  },
+  "large": {
+    "document": "1458664d7d5b2a5d",
+    "output": "39fa30d844f25808",
+    "operations": 466
+  }
+}

@@ -162,7 +162,14 @@ function declaredAt(sourceFile: ts.SourceFile, { line, column }: FunctionLocatio
   return found
 }
 
-export function inlineMiddleware(program: ts.Program, middleware: InlineMiddleware[]) {
+/**
+ * `locate` finds where V8 declared the functions no function of the app's sources matches.
+ */
+export function inlineMiddleware(
+  program: ts.Program,
+  middleware: InlineMiddleware[],
+  locate: typeof locateFunctions = locateFunctions,
+) {
   let index: Map<string, FunctionNode[]> | undefined
   const erased = new Map<FunctionNode, string | undefined>()
 
@@ -214,7 +221,7 @@ export function inlineMiddleware(program: ts.Program, middleware: InlineMiddlewa
 
   const locationOf = (fn: Function) => {
     if (!locations) {
-      const { found, failures } = locateFunctions(
+      const { found, failures } = locate(
         middleware.flatMap(({ source, fn }) => (bySource(source).kind === 'missing' ? [fn] : [])),
       )
 

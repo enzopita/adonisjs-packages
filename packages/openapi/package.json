@@ -19,7 +19,8 @@
   "files": [
     "build",
     "!build/bin",
-    "!build/tests"
+    "!build/tests",
+    "!build/bench"
   ],
   "type": "module",
   "exports": {

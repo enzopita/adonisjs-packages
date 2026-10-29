@@ -40,16 +40,19 @@ function acquire() {
   }
 }
 
-// Other snapshots are of another Node.js or TypeScript, which no run of this one reads, failure
-// markers are of builds that one which worked replaces, and the rest are left by stopped builds.
+// Other snapshots of the app are of another Node.js or TypeScript, which no run of this one reads,
+// failure markers are of builds that one which worked replaces, and the rest are left by stopped
+// builds.
 function prune() {
   const dir = dirname(blob)
+  const app = basename(blob).replace(/[0-9a-f]{16}\.blob$/, '')
+  const snapshot = new RegExp(`^${app}[0-9a-f]{16}\\.blob(\\.failed)?$`)
 
   for (const name of readdirSync(dir)) {
     const file = join(dir, name)
 
     const stale =
-      /^program-[0-9a-f]{16}\.blob(\.failed)?$/.test(name) ||
+      snapshot.test(name) ||
       (/\.(tmp|json)$/.test(name) &&
         Date.now() - (statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0) > STALE_LOCK_MS)
 

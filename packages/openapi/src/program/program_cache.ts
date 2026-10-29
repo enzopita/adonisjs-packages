@@ -52,7 +52,9 @@ export function programCache(appRoot: string): ProgramCache | undefined {
 
   if (!fingerprint) return undefined
 
-  const blob = join(dir, `program-${fingerprint}.blob`)
+  // A named folder may hold the snapshots of several apps, which a build of one must not prune.
+  const app = named ? `${createHash('sha256').update(appRoot).digest('hex').slice(0, 8)}-` : ''
+  const blob = join(dir, `program-${app}${fingerprint}.blob`)
   const failed = failedLately(blob)
   const exists = !failed && existsSync(blob)
 

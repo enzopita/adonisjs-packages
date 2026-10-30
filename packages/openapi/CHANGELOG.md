@@ -1,5 +1,11 @@
 # @enzopita/adonisjs-openapi
 
+## 1.3.0
+
+### Minor Changes
+
+- [#83](https://github.com/enzopita/adonisjs-packages/pull/83) [`5ea7422`](https://github.com/enzopita/adonisjs-packages/commit/5ea74222fa3d918f67ca33bc00347299fccff571) Thanks [@enzopita](https://github.com/enzopita)! - Document the webhooks the app sends in the OpenAPI 3.1 top-level `webhooks` object. `webhooks: defineWebhooks<Bodies>({ examples })` names a type whose keys are the webhook names and whose values are the bodies, and an optional example per webhook, typed by those bodies. Each key becomes a `post` operation with the id `webhook.<key>`, its doc comment as the summary and description, and its body in `components.schemas` as `Webhook.<key>`. `openapi:check` fails when a body type changes. New diagnostics `OA-W001` to `OA-W004` report a config with no bodies type, an example that is not JSON, an example of no webhook and a body emitted as `{}`.
+
 ## 1.2.3
 
 ### Patch Changes

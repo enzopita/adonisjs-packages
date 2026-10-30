@@ -1,6 +1,6 @@
 {
   "name": "@enzopita/adonisjs-openapi",
-  "version": "1.2.3",
+  "version": "1.3.0",
   "description": "Generate an OpenAPI document from the routes, validators and transformers of an AdonisJS app",
   "keywords": [
     "adonisjs",

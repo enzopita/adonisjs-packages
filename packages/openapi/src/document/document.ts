@@ -20,6 +20,8 @@ import { ResponseComponents } from './response_components.ts'
 import { responsesFor } from './responses/responses.ts'
 import { securityFor } from './security.ts'
 import { bodyFields, mergeSchemas } from './validator_schemas.ts'
+import type { WireWebhooks } from './webhook_examples.ts'
+import { webhooksFor } from './webhooks.ts'
 
 const NO_DOCS: OperationDocs = { meta: {}, throws: [], responses: [], examples: [], problems: [] }
 
@@ -32,7 +34,10 @@ export interface DocumentInput {
   configFile: string
   routes: RouteOperation[]
   operationIds: string[][]
-  config: Omit<OpenApiConfig, 'routes' | 'operationId' | 'errors'> & { errors: NamedErrors }
+  config: Omit<OpenApiConfig, 'routes' | 'operationId' | 'errors' | 'webhooks'> & {
+    errors: NamedErrors
+    webhooks?: WireWebhooks
+  }
   vine: Map<string, JsonSchema>
   diagnostics: Diagnostic[]
 }
@@ -114,6 +119,8 @@ export function documentOf(
     }
   }
 
+  const webhooks = config.webhooks && webhooksFor(types, config.webhooks, operationIds, diagnostics)
+
   diagnostics.push(
     ...types.exceptions.diagnostics,
     ...types.errors.diagnostics,
@@ -130,6 +137,7 @@ export function documentOf(
     openapi: '3.1.0',
     info: config.document.info,
     paths,
+    ...(webhooks && { webhooks }),
     components: {
       schemas: types.schemas.components,
       ...(Object.keys(responses).length > 0 && { responses }),

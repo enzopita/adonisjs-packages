@@ -70,6 +70,17 @@ test.group('openapi:generate: a custom operationId', () => {
     await assert.rejects(() => readFile(join(dir, 'openapi.json')))
   })
 
+  test('fails on a route id that a webhook already has', async ({ assert }) => {
+    const { output } = await generateWith(
+      "({ name, method, path }) => name === 'probe.probe.echo' && method === 'get' ? 'webhook.user.created' : `${method}.${path}.${name}`",
+    )
+
+    assert.include(
+      output,
+      'OA-O001 webhook user.created: the operationId webhook.user.created is already the one of GET /api/v1/probe/echo',
+    )
+  })
+
   test('fails on an empty id', async ({ assert }) => {
     const { output } = await generateWith("() => ''")
 

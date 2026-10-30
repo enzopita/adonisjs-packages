@@ -29,7 +29,10 @@ export interface OpenApiOperation {
   tags?: string[]
   deprecated?: true
   parameters?: OpenApiParameter[]
-  requestBody?: { required: true; content: Record<string, { schema: JsonSchema }> }
+  requestBody?: {
+    required: true
+    content: Record<string, { schema: JsonSchema; example?: Json }>
+  }
   responses: Record<string, OpenApiResponse | OpenApiReference>
   security?: Record<string, string[]>[]
 }
@@ -40,6 +43,7 @@ export interface OpenApiDocument {
   servers?: DocumentConfig['servers']
   tags?: DocumentConfig['tags']
   paths: Record<string, Partial<Record<HttpMethod, OpenApiOperation>>>
+  webhooks?: Record<string, { post: OpenApiOperation }>
   components: {
     schemas: Record<string, JsonSchema>
     responses?: Record<string, OpenApiResponse>

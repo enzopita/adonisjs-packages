@@ -54,6 +54,22 @@ export interface OpenApiConfig {
    * (`name` is the route name, `path` the OpenAPI path), and must return a unique id.
    */
   operationId?: (route: { name: string; method: string; path: string }) => string
+  webhooks?: WebhooksConfig
+}
+
+/**
+ * The webhooks the app sends, written as the document's top-level `webhooks`. Built by
+ * `defineWebhooks<Bodies>()`, whose `Bodies` has a key per webhook and the body POSTed as its value.
+ */
+export interface WebhooksConfig<Bodies extends object = object> {
+  /**
+   * An example body per webhook, sent through `JSON.stringify` as the app would send it.
+   */
+  examples?: { [Key in keyof Bodies]?: Bodies[Key] }
+  /**
+   * Never set: the generator reads `Bodies` from the type of the config.
+   */
+  bodies?: Bodies
 }
 
 /**
@@ -74,12 +90,14 @@ export interface RulesConfig {
  * What `defineConfig()` takes: every key is optional, and `document` and `security` merge their
  * keys over the defaults.
  */
-export type OpenApiUserConfig<Errors extends ErrorsConfig = ErrorsConfig> = Partial<
-  Omit<OpenApiConfig, 'document' | 'security' | 'errors'>
-> & {
+export type OpenApiUserConfig<
+  Errors extends ErrorsConfig = ErrorsConfig,
+  Webhooks extends WebhooksConfig = WebhooksConfig,
+> = Partial<Omit<OpenApiConfig, 'document' | 'security' | 'errors' | 'webhooks'>> & {
   document?: Partial<DocumentConfig>
   security?: Partial<SecurityConfig>
   errors?: Errors
+  webhooks?: Webhooks
 }
 
 /**

@@ -1,9 +1,16 @@
-import { cp, readFile, rm } from 'node:fs/promises'
+import { cp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { test } from '@japa/runner'
 import type { OpenApiDocument } from '../src/types.ts'
-import { brokenApp, generateInCopy, json, object, unauthorizedApp } from './support/playground.ts'
+import {
+  brokenApp,
+  generateInCopy,
+  json,
+  object,
+  playground,
+  unauthorizedApp,
+} from './support/playground.ts'
 
 test.group('openapi:generate on an app whose handler renders E_UNAUTHORIZED_ACCESS', group => {
   let document: OpenApiDocument
@@ -191,5 +198,57 @@ test.group('openapi:generate on an app whose tags are wrong', group => {
       output,
       "OA-E003 errors.middleware['#start/limiter'] matches no middleware of the documented routes: name the middleware as `node ace list:routes` shows it",
     )
+  })
+
+  test('warns about a webhook body emitted as {} and an example of no webhook', ({ assert }) => {
+    assert.include(
+      output,
+      'OA-W004 webhook audit.logged: the body has no JSON Schema and is emitted as {}: type the body as plain data (app/services/broken_webhooks.ts:2)',
+    )
+    assert.include(
+      output,
+      'OA-W003 webhooks.examples: audit.purged is not a webhook of the bodies type, the example is ignored',
+    )
+    assert.notInclude(output, 'OA-W003 webhooks.examples: audit.logged')
+  })
+
+  test('warns about one example that is not JSON and keeps the others', ({ assert }) => {
+    assert.match(output, /OA-W002 webhooks\.examples: audit\.read is not JSON \(.*BigInt.*\)/)
+    assert.notInclude(output, 'OA-W002 webhooks.examples: audit.logged')
+  })
+})
+
+test.group('openapi:generate on an app whose webhooks config names no bodies', group => {
+  let unresolved: string
+  let untyped: string
+
+  group.setup(async () => {
+    const config = await readFile(join(fileURLToPath(playground), 'config/openapi.ts'), 'utf8')
+
+    const generate = (from: string, to: string) =>
+      generateInCopy(copy => writeFile(join(copy, 'config/openapi.ts'), config.replace(from, to)))
+
+    const results = await Promise.all([
+      generate("from '#services/webhooks'", "from '#services/missing'"),
+      generate('defineWebhooks<WebhookBodies>(', '('),
+    ])
+
+    ;[unresolved, untyped] = results.map(({ output }) => output)
+
+    return async () => {
+      await Promise.all(results.map(({ dir }) => rm(dir, { recursive: true })))
+    }
+  })
+
+  test('fails on a bodies type that does not resolve', ({ assert }) => {
+    assert.include(
+      unresolved,
+      'OA-W001 webhooks: the config names no object type of webhook bodies',
+    )
+    assert.include(unresolved, 'The errors above block the document')
+  })
+
+  test('fails on webhooks written without defineWebhooks', ({ assert }) => {
+    assert.include(untyped, 'OA-W001 webhooks: the config names no object type of webhook bodies')
   })
 })

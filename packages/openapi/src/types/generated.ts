@@ -48,6 +48,10 @@ export type ResponseSource = (
  * - `OA-S003`: a summary longer than `rules.summaryMaxLength`.
  * - `OA-S004`: a summary whose trailing period breaks `rules.summaryTrailingPeriod`.
  * - `OA-O001`: an `operationId` that two operations share.
+ * - `OA-W001`: a `webhooks` with no object type of bodies, from `defineWebhooks<Bodies>()`.
+ * - `OA-W002`: a `webhooks.examples` entry that `JSON.stringify` cannot write.
+ * - `OA-W003`: a `webhooks.examples` key that is not a webhook of the bodies type.
+ * - `OA-W004`: a webhook body with no JSON Schema, emitted as `{}`.
  * - `OA-J001`: a type with no JSON Schema, emitted as `{}`.
  * - `OA-J002`: a Lucid model, emitted as `{}`.
  */
@@ -75,6 +79,10 @@ export type DiagnosticCode =
   | 'OA-S003'
   | 'OA-S004'
   | 'OA-O001'
+  | 'OA-W001'
+  | 'OA-W002'
+  | 'OA-W003'
+  | 'OA-W004'
   | 'OA-J001'
   | 'OA-J002'
 

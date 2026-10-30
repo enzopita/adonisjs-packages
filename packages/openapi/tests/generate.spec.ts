@@ -251,6 +251,50 @@ test.group('openapi:generate on the playground app: the document', group => {
     )
   })
 
+  test('writes a webhook per key of the bodies type, with its body and example', ({ assert }) => {
+    const webhooks = document.webhooks!
+
+    assert.sameOrderedMembers(Object.keys(webhooks), [
+      'user.created',
+      'user.deleted',
+      'user.email_changed',
+    ])
+    assert.deepEqual(webhooks['user.created']!.post, {
+      operationId: 'webhook.user.created',
+      summary: 'A user signed up.',
+      description: 'Sent once the account exists, before its email is verified.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { $ref: '#/components/schemas/Webhook.user.created' },
+            example: {
+              id: 'evt_01',
+              type: 'user.created',
+              occurredAt: '2026-01-01T00:00:00.000Z',
+              data: { userId: 1, email: 'ada@example.com' },
+            },
+          },
+        },
+      },
+      responses: { '2XX': { description: 'Received.' } },
+    })
+    assert.deepEqual(
+      body(document, webhooks['user.deleted']!.post),
+      object({
+        id: { type: 'string', description: 'The same across the retries of one delivery.' },
+        type: { type: 'string', const: 'user.deleted' },
+        occurredAt: { type: 'string' },
+        data: object({ userId: { type: 'number' } }),
+      }),
+    )
+    assert.notProperty(
+      webhooks['user.deleted']!.post.requestBody!.content['application/json'],
+      'example',
+    )
+    assert.isTrue(webhooks['user.email_changed']!.post.deprecated)
+  })
+
   test('tags an operation with the @tags of its controller class, not its route name', ({
     assert,
   }) => {

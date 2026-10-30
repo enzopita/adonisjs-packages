@@ -2,7 +2,7 @@ import type { generateDocument as generate } from './src/document/generate.ts'
 
 export { configure } from './configure.ts'
 
-export { defineConfig } from './src/define_config.ts'
+export { defineConfig, defineWebhooks } from './src/define_config.ts'
 
 export { stubsRoot } from './stubs/main.ts'
 

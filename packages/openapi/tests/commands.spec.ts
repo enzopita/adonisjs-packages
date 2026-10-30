@@ -220,4 +220,28 @@ test.group('openapi:check', group => {
     assert.exists(error)
     assert.include(`${error!.stdout}${error!.stderr}`, '/info/version')
   })
+
+  test('fails when a webhook body type changes and the document does not', async ({ assert }) => {
+    const file = join(dir, 'app/services/webhooks.ts')
+    const source = await readFile(file, 'utf8')
+    await writeFile(
+      file,
+      source.replace('{ userId: number }>', '{ userId: number; reason: string }>'),
+    )
+
+    try {
+      const error = await run('node', ['ace', 'openapi:check'], { cwd: dir }).then(
+        () => undefined,
+        (failure: { stdout: string; stderr: string }) => failure,
+      )
+
+      assert.exists(error)
+      assert.include(
+        `${error!.stdout}${error!.stderr}`,
+        '/components/schemas/Webhook.user.deleted/properties/data/properties/reason',
+      )
+    } finally {
+      await writeFile(file, source)
+    }
+  })
 })

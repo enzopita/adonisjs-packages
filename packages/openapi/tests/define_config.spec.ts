@@ -23,4 +23,21 @@ test.group('defineConfig', () => {
     })
     assert.deepEqual(config.security, { schemes: {}, middleware: {} })
   })
+
+  test('types the webhook examples by the bodies the type argument names', async ({ assert }) => {
+    const { defineConfig, defineWebhooks } = await import('../src/define_config.ts')
+
+    interface Bodies {
+      'user.created': { id: number }
+    }
+
+    const config = defineConfig({
+      webhooks: defineWebhooks<Bodies>({ examples: { 'user.created': { id: 1 } } }),
+    })
+
+    // @ts-expect-error the example body does not match the type of its webhook
+    defineWebhooks<Bodies>({ examples: { 'user.created': { id: '1' } } })
+
+    assert.deepEqual(config.webhooks, { examples: { 'user.created': { id: 1 } } })
+  })
 })

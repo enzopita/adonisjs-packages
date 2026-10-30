@@ -2904,6 +2904,82 @@
       }
     }
   },
+  "webhooks": {
+    "user.created": {
+      "post": {
+        "operationId": "webhook.user.created",
+        "summary": "A user signed up.",
+        "description": "Sent once the account exists, before its email is verified.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Webhook.user.created"
+              },
+              "example": {
+                "id": "evt_01",
+                "type": "user.created",
+                "occurredAt": "2026-01-01T00:00:00.000Z",
+                "data": {
+                  "userId": 1,
+                  "email": "ada@example.com"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received."
+          }
+        }
+      }
+    },
+    "user.deleted": {
+      "post": {
+        "operationId": "webhook.user.deleted",
+        "summary": "A user deleted their account.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Webhook.user.deleted"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received."
+          }
+        }
+      }
+    },
+    "user.email_changed": {
+      "post": {
+        "operationId": "webhook.user.email_changed",
+        "summary": "A user changed their email.",
+        "deprecated": true,
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Webhook.user.email_changed"
+              }
+            }
+          }
+        },
+        "responses": {
+          "2XX": {
+            "description": "Received."
+          }
+        }
+      }
+    }
+  },
   "components": {
     "schemas": {
       "MemberCard": {
@@ -2951,6 +3027,9 @@
       "User": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "number"
+          },
           "createdAt": {
             "anyOf": [
               {
@@ -2974,9 +3053,6 @@
               }
             ]
           },
-          "id": {
-            "type": "number"
-          },
           "updatedAt": {
             "anyOf": [
               {
@@ -2993,10 +3069,10 @@
         },
         "additionalProperties": false,
         "required": [
+          "id",
           "createdAt",
           "email",
           "fullName",
-          "id",
           "updatedAt",
           "initials"
         ]
@@ -3205,6 +3281,119 @@
         "additionalProperties": false,
         "required": [
           "nickname"
+        ]
+      },
+      "Webhook.user.created": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The same across the retries of one delivery."
+          },
+          "type": {
+            "type": "string",
+            "const": "user.created"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "number"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "email"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "occurredAt",
+          "data"
+        ]
+      },
+      "Webhook.user.deleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The same across the retries of one delivery."
+          },
+          "type": {
+            "type": "string",
+            "const": "user.deleted"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "number"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "userId"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "occurredAt",
+          "data"
+        ]
+      },
+      "Webhook.user.email_changed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The same across the retries of one delivery."
+          },
+          "type": {
+            "type": "string",
+            "const": "user.email_changed"
+          },
+          "occurredAt": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "userId": {
+                "type": "number"
+              },
+              "email": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "userId",
+              "email"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "occurredAt",
+          "data"
         ]
       },
       "ErrorCode": {

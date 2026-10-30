@@ -9,6 +9,7 @@ import type { WorkerInput } from './document_request.ts'
 import { startRunner } from './document_runner.ts'
 import { operationIdFor } from './operation_id.ts'
 import { validatorSchemas } from './validator_schemas.ts'
+import { wireWebhooks } from './webhook_examples.ts'
 
 /**
  * Starts parsing the app's program off the main thread, which reads the document's types once the
@@ -55,7 +56,7 @@ export function prepareDocument(appRoot: string) {
             ]),
         )
 
-        const { routes: _, operationId: __, errors, ...rest } = config
+        const { routes: _, operationId: __, errors, webhooks, ...rest } = config
 
         const input: WorkerInput = {
           appRoot,
@@ -68,7 +69,11 @@ export function prepareDocument(appRoot: string) {
             })),
           })),
           operationIds: routes.map(route => operationIds.get(route)!),
-          config: { ...rest, errors: namedErrors(errors) },
+          config: {
+            ...rest,
+            errors: namedErrors(errors),
+            ...(webhooks && { webhooks: wireWebhooks(webhooks, diagnostics) }),
+          },
           vine,
           diagnostics,
           located,

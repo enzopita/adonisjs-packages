@@ -35,6 +35,10 @@ export interface AppTypes {
   exceptions: ExceptionResponses
   errors: ConfiguredErrors
   validationError?: ts.Type
+  /**
+   * The bodies `defineWebhooks<Bodies>()` names in the type of the config.
+   */
+  webhooks?: ts.Type
   inlineDiagnostics: Diagnostic[]
   bodyParser: BodyParser
   tags: Omit<TagContext, 'method' | 'problems'>
@@ -119,6 +123,7 @@ export function readApp(
     presets,
   )
 
+  const webhooksConfig = property(checker, types.config, 'webhooks')
   const transformers = transformerTypes(checker, program.getSourceFile(dataFile))
   const named = new Map(transformers.map(([type, name]) => [type, name]))
 
@@ -144,6 +149,11 @@ export function readApp(
     exceptions,
     errors: configured,
     validationError: types.validationError,
+    webhooks: property(
+      checker,
+      webhooksConfig && checker.getNonNullableType(webhooksConfig),
+      'bodies',
+    ),
     inlineDiagnostics: inline.diagnostics,
     bodyParser: readBodyParser(join(appRoot, 'config/bodyparser.ts')),
     tags: {

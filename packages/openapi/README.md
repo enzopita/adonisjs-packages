@@ -153,6 +153,7 @@ Every key is optional. `defineConfig()` throws when the config sets a 0.x key, s
 | `strict`              | `false`                              | Makes every warning an error in `openapi:generate` and `openapi:check`. The `--strict` and `--no-strict` flags override it. The build hook and `--explain` ignore it.                |
 | `rules`               | `{}`                                 | `summaryMaxLength` warns about a longer summary (`OA-S003`). `summaryTrailingPeriod: true` warns about a summary without a final period, `false` about one with it (`OA-S004`).      |
 | `operationId`         | not set                              | A function that replaces the `operationId` of every operation. See [Operation ids](#operation-ids).                                                                                  |
+| `webhooks`            | not set                              | The webhooks the app sends, as `defineWebhooks<Bodies>()`, written as the document's top-level `webhooks`. See [Webhooks](#webhooks).                                                |
 
 ### Operation ids
 
@@ -193,6 +194,56 @@ A `throwers` or `middleware` key that matches nothing in the documented routes, 
 An array can be written inline or held by a `const`, which the generator follows through `as const`, `satisfies`, parentheses and other consts, and a spread of an array literal or such a const adds its classes, as in `[...base, E_OAUTH_MISSING_CODE]`. A spread the generator cannot read, such as a call, gets `OA-E001` and its classes are ignored: `const allyFailures = [E_OAUTH_STATE_MISMATCH, E_OAUTH_MISSING_CODE]` and `'ally.user': allyFailures`. An empty array `[]` documents nothing and replaces the preset of that key, so it gets `OA-E003`. Use `false` to turn a preset off.
 
 A thrower key matches every call of that method. A `findOrFail()` on a row that a foreign key or a validator guarantees still documents its `404`. The response is true, because a concurrent delete can send it, and `@response` cannot remove it. Remove the key to drop it from every route.
+
+### Webhooks
+
+An app that POSTs events to its subscribers documents them in the top-level `webhooks` object of OpenAPI 3.1. Export a type whose keys are the webhook names and whose values are the bodies:
+
+```ts
+// app/services/webhooks.ts
+export interface WebhookBodies {
+  /**
+   * A user signed up.
+   *
+   * Sent once the account exists, before its email is verified.
+   */
+  'user.created': { id: string; data: { userId: number; email: string } }
+  /**
+   * @deprecated Read the email from `user.updated` instead.
+   */
+  'user.email_changed': { id: string; data: { userId: number; email: string } }
+}
+```
+
+Then name it in the config with `defineWebhooks()`:
+
+```ts
+// config/openapi.ts
+import { defineConfig, defineWebhooks } from '@enzopita/adonisjs-openapi'
+import type { WebhookBodies } from '#services/webhooks'
+
+export default defineConfig({
+  webhooks: defineWebhooks<WebhookBodies>({
+    examples: {
+      'user.created': { id: 'evt_01', data: { userId: 1, email: 'ada@example.com' } },
+    },
+  }),
+})
+```
+
+- The type argument is read from the type of the config, like the classes of `errors`. A type the app already keeps, such as an event map, documents every event with no list kept by hand.
+- `examples` is optional, and typed by the bodies, so an example that does not match its webhook fails to compile. Each one goes through `JSON.stringify`, as the app would send it. A webhook without a key gets no example.
+
+Each key becomes a `post` operation:
+
+- Its `operationId` is `webhook.` and the key, such as `webhook.user.created`. It must not be the id of a route (`OA-O001`). The `operationId` config does not apply to webhooks.
+- The first paragraph of the key's doc comment is the `summary`, the rest the `description`. `@deprecated` marks it deprecated.
+- The body is required, sent as `application/json`, and named `Webhook.` and the key in `components.schemas`, such as `Webhook.user.created`. A character a component name cannot hold becomes a dot. A body that is already a named schema, such as a transformer's, references it directly.
+- The response is a `2XX` with no body.
+
+The headers of each delivery, such as a signature, are not documented. Describe them in `document.info.description`.
+
+A body type that changes changes the document, so `openapi:check` fails until you generate it again. A `webhooks` with no bodies type, written without `defineWebhooks<Bodies>()` or with a type that does not resolve, fails generation with `OA-W001`. An example that is not JSON gets `OA-W002`, an example key that is not a webhook gets `OA-W003`, and a body emitted as `{}`, such as `unknown`, gets `OA-W004`.
 
 ## Document an operation
 
@@ -484,6 +535,10 @@ Codes keep their meaning across releases. An `error` fails `openapi:generate` an
 | `OA-S003` | warning                                           | A summary longer than `rules.summaryMaxLength`.                                                                                                   | Shorten the first paragraph of the comment.                                                                                                                                                        |
 | `OA-S004` | warning                                           | A summary whose final period breaks `rules.summaryTrailingPeriod`.                                                                                | Add or remove the period.                                                                                                                                                                          |
 | `OA-O001` | error                                             | An `operationId` that two operations share. It names the first one.                                                                               | Return a different id from `operationId`, or rename the route.                                                                                                                                     |
+| `OA-W001` | error                                             | A `webhooks` with no object type of bodies: written without `defineWebhooks<Bodies>()`, or with a type that does not resolve.                     | Write it as `defineWebhooks<Bodies>()` with an exported type of the app. See [Webhooks](#webhooks).                                                                                                |
+| `OA-W002` | warning                                           | A `webhooks.examples` entry that `JSON.stringify` cannot write, such as a `BigInt`. That webhook gets no example.                                 | Give the example the JSON body the app sends.                                                                                                                                                      |
+| `OA-W003` | warning                                           | A `webhooks.examples` key that is not a webhook of the bodies type.                                                                               | Fix the key, or add the webhook to the type.                                                                                                                                                       |
+| `OA-W004` | warning                                           | A webhook body with no JSON Schema, such as `unknown`, emitted as `{}`.                                                                           | Type the body as plain data.                                                                                                                                                                       |
 | `OA-J001` | warning                                           | A type with no JSON Schema, emitted as `{}`.                                                                                                      | Return a plain data type.                                                                                                                                                                          |
 | `OA-J002` | warning                                           | A Lucid model returned directly, emitted as `{}`.                                                                                                 | Return it through a transformer.                                                                                                                                                                   |
 

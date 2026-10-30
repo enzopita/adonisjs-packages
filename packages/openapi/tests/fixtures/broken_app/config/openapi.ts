@@ -1,8 +1,9 @@
 import { errors as shieldErrors } from '@adonisjs/shield'
 import { errors as bouncerErrors } from '@adonisjs/bouncer'
 import { errors as limiterErrors } from '@adonisjs/limiter'
-import { defineConfig } from '@enzopita/adonisjs-openapi'
+import { defineConfig, defineWebhooks } from '@enzopita/adonisjs-openapi'
 import LedgerException from '#exceptions/ledger_exception'
+import type { BrokenWebhookBodies } from '#services/broken_webhooks'
 
 export default defineConfig({
   document: { tags: [{ name: 'Broken' }] },
@@ -15,4 +16,8 @@ export default defineConfig({
     },
     middleware: { '#start/limiter': limiterErrors.E_TOO_MANY_REQUESTS },
   },
+  webhooks: defineWebhooks<BrokenWebhookBodies>({
+    // A BigInt has no JSON, and audit.purged is no webhook.
+    examples: { 'audit.logged': {}, 'audit.read': { at: 1n }, 'audit.purged': {} } as never,
+  }),
 })

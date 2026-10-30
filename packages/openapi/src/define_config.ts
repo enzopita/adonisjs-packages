@@ -1,4 +1,4 @@
-import type { ErrorsConfig, OpenApiConfig, OpenApiUserConfig } from './types.ts'
+import type { ErrorsConfig, OpenApiConfig, OpenApiUserConfig, WebhooksConfig } from './types.ts'
 
 // Where each 0.x key went, so a config that still sets one fails with the fix.
 const MOVED = {
@@ -12,11 +12,15 @@ const MOVED = {
 
 /**
  * Generic over `errors` so the type of the config keeps each exception the entries name: the
- * generator reads it to match the `instanceof` branches of the exception handler.
+ * generator reads it to match the `instanceof` branches of the exception handler. Generic over
+ * `webhooks` for the same reason: the generator reads the bodies from it.
  */
-export function defineConfig<const Errors extends ErrorsConfig = {}>(
-  config: OpenApiUserConfig<Errors> = {},
-): OpenApiConfig & { errors: Errors } {
+export function defineConfig<
+  const Errors extends ErrorsConfig = {},
+  Webhooks extends WebhooksConfig = never,
+>(
+  config: OpenApiUserConfig<Errors, Webhooks> = {},
+): Omit<OpenApiConfig, 'webhooks'> & { errors: Errors; webhooks?: Webhooks } {
   if (config.routes?.only && config.routes.except) {
     throw new Error('openapi: use either "routes.only" or "routes.except", not both')
   }
@@ -43,4 +47,14 @@ export function defineConfig<const Errors extends ErrorsConfig = {}>(
     document: { info: { title: 'API', version: '1.0.0' }, servers: [], tags: [], ...document },
     security: { schemes: {}, middleware: {}, ...security },
   }
+}
+
+/**
+ * The `webhooks` of `defineConfig()`. `Bodies` is an exported type of the app with a key per
+ * webhook and the body POSTed as its value, and `examples` holds an example body per webhook.
+ */
+export function defineWebhooks<Bodies extends object = never>(
+  config: { examples?: WebhooksConfig<NoInfer<Bodies>>['examples'] } = {},
+): WebhooksConfig<Bodies> {
+  return config
 }

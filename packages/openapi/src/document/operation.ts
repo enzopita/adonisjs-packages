@@ -61,7 +61,7 @@ export function operationFor(
 }
 
 // orval types and sends a body listed inline under several media types as a union with no Content-Type.
-function shared(app: AppTypes, id: string, schema: JsonSchema): JsonSchema {
+export function shared(app: AppTypes, id: string, schema: JsonSchema): JsonSchema {
   const { components } = app.schemas
   const base = componentName(id)
   let name = base

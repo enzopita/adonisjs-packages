@@ -2,7 +2,8 @@ import { errors as allyErrors } from '@adonisjs/ally'
 import { errors as lucidErrors } from '@adonisjs/lucid'
 import { errors as bouncerErrors } from '@adonisjs/bouncer'
 import { errors as limiterErrors } from '@adonisjs/limiter'
-import { defineConfig } from '@enzopita/adonisjs-openapi'
+import { defineConfig, defineWebhooks } from '@enzopita/adonisjs-openapi'
+import type { WebhookBodies } from '#services/webhooks'
 
 export default defineConfig({
   output: 'openapi.json',
@@ -40,4 +41,14 @@ export default defineConfig({
       globalThrottle: limiterErrors.E_TOO_MANY_REQUESTS,
     },
   },
+  webhooks: defineWebhooks<WebhookBodies>({
+    examples: {
+      'user.created': {
+        id: 'evt_01',
+        type: 'user.created',
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        data: { userId: 1, email: 'ada@example.com' },
+      },
+    },
+  }),
 })

@@ -30,6 +30,7 @@ test.group('@enzopita/adonisjs-openapi/types', () => {
         'RulesConfig',
         'SecurityConfig',
         'SecurityScheme',
+        'WebhooksConfig',
         'DocsOptions',
         'DocsPage',
         'DocsUi',

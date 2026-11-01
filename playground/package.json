@@ -45,7 +45,7 @@
     "@adonisjs/shield": "^9.0.0",
     "@enzopita/adonisjs-openapi": "workspace:*",
     "@japa/api-client": "^3.2.1",
-    "@tuyau/core": "^1.2.2",
+    "@tuyau/core": "^1.3.0",
     "@vinejs/vine": "catalog:",
     "better-sqlite3": "^13.0.3",
     "luxon": "^3.7.2",

@@ -24,6 +24,7 @@ test.group('@enzopita/adonisjs-openapi/types', () => {
         'DocumentInfo',
         'ErrorsConfig',
         'ExceptionClass',
+        'MiddlewareSecurity',
         'OpenApiConfig',
         'OpenApiUserConfig',
         'RouteMatcher',

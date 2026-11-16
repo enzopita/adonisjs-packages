@@ -148,7 +148,7 @@ Every key is optional. `defineConfig()` throws when the config sets a 0.x key, s
 | `document.tags`       | `[]`                                 | The document's top-level `tags`, which describe and order the OpenAPI tags of the operations. An OpenAPI tag an operation uses must be declared here, or it gets `OA-S002`.          |
 | `routes`              | `{}`                                 | `only` or `except`, with the same matchers as Tuyau's `generateRegistry()`: a substring, a regular expression, or a function of the route name.                                      |
 | `security.schemes`    | `{}`                                 | The document's `components.securitySchemes`.                                                                                                                                         |
-| `security.middleware` | `{}`                                 | Maps a named middleware, such as `middleware.auth()`, to a key of `security.schemes`. See [Security](#security).                                                                     |
+| `security.middleware` | `{}`                                 | Maps a named middleware, such as `middleware.auth()`, to the keys of `security.schemes` it accepts. See [Security](#security).                                                       |
 | `errors`              | `{}`                                 | The exceptions thrown inside packages, and the error body. See [Errors config](#errors-config).                                                                                      |
 | `strict`              | `false`                              | Makes every warning an error in `openapi:generate` and `openapi:check`. The `--strict` and `--no-strict` flags override it. The build hook and `--explain` ignore it.                |
 | `rules`               | `{}`                                 | `summaryMaxLength` warns about a longer summary (`OA-S003`). `summaryTrailingPeriod: true` warns about a summary without a final period, `false` about one with it (`OA-S004`).      |
@@ -176,6 +176,26 @@ Two operations with the same id fail generation with `OA-O001`, which names the 
 ### Security
 
 Routes behind a middleware that `security.middleware` maps get its scheme in `security` and a `401` response. A route behind several mapped middleware, such as `middleware.auth()` and `middleware.tenant()`, requires all their schemes together: they share one Security Requirement Object.
+
+A middleware that accepts several schemes maps to an array of them, and each becomes an alternative Security Requirement Object. A scheme that another one makes unnecessary, such as a tenant header an API key already implies, maps to `{ scheme, notWith }`, and is left out of the requirements holding a scheme of `notWith`:
+
+```ts
+export default defineConfig({
+  security: {
+    schemes: {
+      accessToken: { type: 'http', scheme: 'bearer' },
+      apiKey: { type: 'http', scheme: 'bearer', description: 'An API key, which names its tenant' },
+      tenant: { type: 'apiKey', in: 'header', name: 'X-Tenant-Id' },
+    },
+    middleware: {
+      auth: ['accessToken', 'apiKey'],
+      tenant: { scheme: 'tenant', notWith: ['apiKey'] },
+    },
+  },
+})
+```
+
+A route behind `middleware.auth()` and `middleware.tenant()` then gets `"security": [{ "accessToken": [], "tenant": [] }, { "apiKey": [] }]`.
 
 ### Errors config
 

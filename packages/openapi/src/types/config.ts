@@ -24,10 +24,14 @@ export interface DocumentConfig {
 }
 
 /**
- * A key of `schemes`, several keys any one of which lets the request through, or a key that the
- * keys in `notWith` make unnecessary, such as a tenant header an API key already implies.
+ * A key of `schemes`, or several any one of which lets the request through. In the object form,
+ * the keys in `notWith` make the scheme unnecessary, such as a tenant header an API key already
+ * implies, and the scheme is valid only with one of the keys in `onlyWith`, such as an API key
+ * accepted only on the routes that also read the tenant header.
  */
-export type MiddlewareSecurity = string | string[] | { scheme: string; notWith: string[] }
+export type MiddlewareSecurity = SchemeEntry | SchemeEntry[]
+
+type SchemeEntry = string | { scheme: string; notWith?: string[]; onlyWith?: string[] }
 
 export interface SecurityConfig {
   schemes: Record<string, SecurityScheme>

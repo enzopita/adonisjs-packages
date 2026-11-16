@@ -1,19 +1,26 @@
 import type { MiddlewareSecurity, SecurityConfig } from '../types.ts'
 import type { RouteOperation } from '../routes/route_operation.ts'
 
-// The schemes any one of which passes the middleware, and those that make its scheme unnecessary.
-function accepted(entry: MiddlewareSecurity) {
-  if (Array.isArray(entry)) return { schemes: entry, notWith: [] }
+interface Accepted {
+  scheme: string
+  notWith: string[]
+  onlyWith?: string[]
+}
 
-  if (entry instanceof Object) return { schemes: [entry.scheme], notWith: entry.notWith }
+// The schemes any one of which passes the middleware.
+function accepted(entry: MiddlewareSecurity): Accepted[] {
+  if (Array.isArray(entry)) return entry.flatMap(accepted)
 
-  return { schemes: [entry], notWith: [] }
+  if (entry instanceof Object) return [{ notWith: [], ...entry }]
+
+  return [{ scheme: entry, notWith: [] }]
 }
 
 /**
  * The middleware of a route that map to a scheme, and the `security` they give the operation.
  * Entries of `security` are alternatives: one per way of passing every mapped middleware, holding
  * the schemes it requires together, less those that another scheme of the entry makes unnecessary.
+ * A way that holds a scheme without any of its `onlyWith` is not one.
  */
 export function securityFor(route: RouteOperation, middleware: SecurityConfig['middleware']) {
   const secured = route.middleware.filter(name => middleware[name])
@@ -21,22 +28,23 @@ export function securityFor(route: RouteOperation, middleware: SecurityConfig['m
 
   if (!entries.length) return { secured, security: [] }
 
-  const combinations = entries.reduce<string[][]>(
-    (sets, entry) => sets.flatMap(set => entry.schemes.map(scheme => [...set, scheme])),
+  const combinations = entries.reduce<Accepted[][]>(
+    (sets, entry) => sets.flatMap(set => entry.map(scheme => [...set, scheme])),
     [[]],
   )
 
-  const notWith = new Map(
-    entries.flatMap(entry => entry.schemes.map(scheme => [scheme, entry.notWith] as const)),
-  )
-
   const requirements = new Map(
-    combinations.map(set => {
+    combinations.flatMap(set => {
+      const names = set.map(({ scheme }) => scheme)
+      const holds = (others: string[]) => others.some(other => names.includes(other))
+
+      if (set.some(({ onlyWith }) => onlyWith && !holds(onlyWith))) return []
+
       const kept = [
-        ...new Set(set.filter(scheme => !notWith.get(scheme)?.some(other => set.includes(other)))),
+        ...new Set(set.filter(({ notWith }) => !holds(notWith)).map(({ scheme }) => scheme)),
       ]
 
-      return [kept.toSorted().join(' '), kept]
+      return [[kept.toSorted().join(' '), kept] as const]
     }),
   )
 

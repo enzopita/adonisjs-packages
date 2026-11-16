@@ -177,7 +177,7 @@ Two operations with the same id fail generation with `OA-O001`, which names the 
 
 Routes behind a middleware that `security.middleware` maps get its scheme in `security` and a `401` response. A route behind several mapped middleware, such as `middleware.auth()` and `middleware.tenant()`, requires all their schemes together: they share one Security Requirement Object.
 
-A middleware that accepts several schemes maps to an array of them, and each becomes an alternative Security Requirement Object. A scheme that another one makes unnecessary, such as a tenant header an API key already implies, maps to `{ scheme, notWith }`, and is left out of the requirements holding a scheme of `notWith`:
+A middleware that accepts several schemes maps to an array of them, and each becomes an alternative Security Requirement Object. A scheme that another one makes unnecessary, such as a tenant header an API key already implies, maps to `{ scheme, notWith }`, and is left out of the requirements holding a scheme of `notWith`. A scheme valid only together with another, such as an API key the app accepts only on routes that also read the tenant header, maps to `{ scheme, onlyWith }`: a requirement that holds it without any scheme of `onlyWith` is left out. Both forms can sit in an array:
 
 ```ts
 export default defineConfig({
@@ -188,14 +188,14 @@ export default defineConfig({
       tenant: { type: 'apiKey', in: 'header', name: 'X-Tenant-Id' },
     },
     middleware: {
-      auth: ['accessToken', 'apiKey'],
+      auth: ['accessToken', { scheme: 'apiKey', onlyWith: ['tenant'] }],
       tenant: { scheme: 'tenant', notWith: ['apiKey'] },
     },
   },
 })
 ```
 
-A route behind `middleware.auth()` and `middleware.tenant()` then gets `"security": [{ "accessToken": [], "tenant": [] }, { "apiKey": [] }]`.
+A route behind `middleware.auth()` and `middleware.tenant()` then gets `"security": [{ "accessToken": [], "tenant": [] }, { "apiKey": [] }]`, and a route behind `middleware.auth()` alone `"security": [{ "accessToken": [] }]`.
 
 ### Errors config
 

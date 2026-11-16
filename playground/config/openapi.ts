@@ -24,11 +24,12 @@ export default defineConfig({
   security: {
     schemes: {
       accessToken: { type: 'http', scheme: 'bearer' },
+      apiKey: { type: 'http', scheme: 'bearer', description: 'An API key, which names its tenant' },
       tenant: { type: 'apiKey', in: 'header', name: 'X-Tenant-Id' },
     },
     middleware: {
-      auth: 'accessToken',
-      tenant: 'tenant',
+      auth: ['accessToken', { scheme: 'apiKey', onlyWith: ['tenant'] }],
+      tenant: { scheme: 'tenant', notWith: ['apiKey'] },
     },
   },
   errors: {

@@ -140,9 +140,12 @@ test.group('openapi:generate on the playground app: the document', group => {
     assert.isUndefined(document.paths['/api/v1/auth/login']!.post!.security)
   })
 
-  test('requires the schemes of every mapped middleware together', ({ assert }) => {
+  test('requires the schemes of every mapped middleware together, or an alternative', ({
+    assert,
+  }) => {
     assert.deepEqual(document.paths['/api/v1/account/avatar']!.put!.security, [
       { accessToken: [], tenant: [] },
+      { apiKey: [] },
     ])
   })
 

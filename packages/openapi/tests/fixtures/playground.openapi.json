@@ -3023,6 +3023,71 @@
         }
       }
     },
+    "/api/v1/probe/attachments": {
+      "post": {
+        "operationId": "probe.probe.attachments",
+        "tags": [
+          "Probe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "names": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "names"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "attachments": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "format": "binary"
+                    }
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "attachments"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "/oauth/github/redirect": {
       "get": {
         "operationId": "github.redirect",

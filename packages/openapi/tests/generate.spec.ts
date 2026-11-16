@@ -74,6 +74,7 @@ test.group('openapi:generate on the playground app: the document', group => {
       '/api/v1/probe/nullable',
       '/api/v1/probe/messages/{id}',
       '/api/v1/probe/templates',
+      '/api/v1/probe/attachments',
       '/api/v1/probe/secret',
     ])
     assert.include(logs, 'OA-R001 probe.closure: closure handlers have no types to read')
@@ -100,6 +101,16 @@ test.group('openapi:generate on the playground app: the document', group => {
     assert.deepEqual(content['multipart/form-data']!.schema.properties!.avatar, {
       type: 'string',
       format: 'binary',
+    })
+  })
+
+  test('sends an array of files as multipart binary items', ({ assert }) => {
+    const content = document.paths['/api/v1/probe/attachments']!.post!.requestBody!.content
+
+    assert.deepEqual(Object.keys(content), ['multipart/form-data'])
+    assert.deepEqual(content['multipart/form-data']!.schema.properties!.attachments, {
+      type: 'array',
+      items: { type: 'string', format: 'binary' },
     })
   })
 

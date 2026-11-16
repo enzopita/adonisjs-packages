@@ -126,6 +126,7 @@ router
         router.post('nullable', [controllers.Probe, 'nullable'])
         router.post('messages/:id', [controllers.Probe, 'message'])
         router.post('templates', [controllers.Probe, 'template'])
+        router.post('attachments', [controllers.Probe, 'attachments'])
         router.route('head', ['HEAD'], [controllers.Probe, 'head'])
         router.get('closure', () => ({ ok: true })).as('closure')
       })

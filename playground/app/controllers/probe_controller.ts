@@ -16,6 +16,7 @@ import {
   pagedProbeValidator,
   searchProbeValidator,
   sentMessageProbeValidator,
+  templateProbeValidator,
 } from '#validators/probe'
 import MemberCardTransformer from '#transformers/member_card_transformer'
 import type { HttpContext } from '@adonisjs/core/http'
@@ -257,6 +258,10 @@ export default class ProbeController {
 
   async message({ request }: HttpContext) {
     return request.validateUsing(sentMessageProbeValidator)
+  }
+
+  async template({ request }: HttpContext) {
+    return request.validateUsing(templateProbeValidator)
   }
 
   async head() {

@@ -41,6 +41,21 @@ test.group('securityFor', () => {
     assert.deepEqual(securityFor(behind('tenant'), middleware).security, [{ tenant: [] }])
   })
 
+  test('lists a scheme with onlyWith only on the routes behind one of its schemes', ({
+    assert,
+  }) => {
+    const middleware = {
+      auth: ['accessToken', { scheme: 'apiKey', onlyWith: ['tenant'] }],
+      tenant: { scheme: 'tenant', notWith: ['apiKey'] },
+    }
+
+    assert.deepEqual(securityFor(behind('auth', 'tenant'), middleware).security, [
+      { accessToken: [], tenant: [] },
+      { apiKey: [] },
+    ])
+    assert.deepEqual(securityFor(behind('auth'), middleware).security, [{ accessToken: [] }])
+  })
+
   test('lists a requirement two combinations share once', ({ assert }) => {
     assert.deepEqual(
       securityFor(behind('auth', 'tenant'), {

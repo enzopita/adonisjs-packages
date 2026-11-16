@@ -124,6 +124,7 @@ router
         router.route('echo', ['GET', 'POST'], [controllers.Probe, 'echo'])
         router.post('paged', [controllers.Probe, 'paged'])
         router.post('nullable', [controllers.Probe, 'nullable'])
+        router.post('messages/:id', [controllers.Probe, 'message'])
         router.route('head', ['HEAD'], [controllers.Probe, 'head'])
         router.get('closure', () => ({ ok: true })).as('closure')
       })

@@ -1,5 +1,19 @@
 # @enzopita/adonisjs-openapi
 
+## 1.4.0
+
+### Minor Changes
+
+- [#93](https://github.com/enzopita/adonisjs-packages/pull/93) [`4c9b3e0`](https://github.com/enzopita/adonisjs-packages/commit/4c9b3e01e858bf686655798dbe485c0b72ce1cec) Thanks [@enzopita](https://github.com/enzopita)! - Document alternative security requirements. A `security.middleware` entry can map a middleware to an array of schemes, any one of which lets the request through, and each becomes its own Security Requirement Object. An entry `{ scheme, notWith }` leaves its scheme out of the requirements that hold a scheme of `notWith`, such as a tenant header an API key already implies: `auth: ['accessToken', 'apiKey']` and `tenant: { scheme: 'tenant', notWith: ['apiKey'] }` give a route behind both `"security": [{ "accessToken": [], "tenant": [] }, { "apiKey": [] }]`.
+
+### Patch Changes
+
+- [#94](https://github.com/enzopita/adonisjs-packages/pull/94) [`abb60bb`](https://github.com/enzopita/adonisjs-packages/commit/abb60bb41a0879456a1a6c0e7d1afc363b5b437c) Thanks [@enzopita](https://github.com/enzopita)! - Type the path parameters of a validator whose object is merged with a `vine.group` from its `params`, as without a group. They were documented as `{ "type": "string" }`, since the input of such a validator is an `anyOf` with no top-level `params`.
+
+- [#90](https://github.com/enzopita/adonisjs-packages/pull/90) [`4f56ffe`](https://github.com/enzopita/adonisjs-packages/commit/4f56ffe8dcce69371949a0bcba89685161c5806e) Thanks [@enzopita](https://github.com/enzopita)! - Document the body of a validator that merges an object with a `vine.group()`, as an `anyOf` of one complete object per group branch, instead of dropping it.
+
+- [#89](https://github.com/enzopita/adonisjs-packages/pull/89) [`e73a630`](https://github.com/enzopita/adonisjs-packages/commit/e73a630f3f31e6f0136a04b62d057a84d6dcf686) Thanks [@enzopita](https://github.com/enzopita)! - On Windows, stop reading the JavaScript next to a package exception's declaration file a second time when looking for its status, since its `\` path never matched the `/` path TypeScript gives.
+
 ## 1.3.0
 
 ### Minor Changes

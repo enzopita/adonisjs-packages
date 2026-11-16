@@ -2790,6 +2790,127 @@
         }
       }
     },
+    "/api/v1/probe/messages/{id}": {
+      "post": {
+        "operationId": "probe.probe.message",
+        "tags": [
+          "Probe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "params": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "id"
+                          ]
+                        },
+                        "channel": {
+                          "type": "string",
+                          "const": "rcs"
+                        },
+                        "templateId": {
+                          "type": "string"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "params",
+                        "channel",
+                        "templateId"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "params": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false,
+                          "required": [
+                            "id"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "channel": {
+                          "type": "string",
+                          "const": "sms"
+                        }
+                      },
+                      "additionalProperties": false,
+                      "required": [
+                        "params",
+                        "text",
+                        "channel"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/probe.probe.message.body"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/probe.probe.message.body"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/probe.probe.message.body"
+              }
+            }
+          }
+        }
+      }
+    },
     "/oauth/github/redirect": {
       "get": {
         "operationId": "github.redirect",
@@ -3281,6 +3402,50 @@
         "additionalProperties": false,
         "required": [
           "nickname"
+        ]
+      },
+      "probe.probe.message.body": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "rcs"
+                ]
+              },
+              "templateId": {
+                "type": "string",
+                "format": "uuid"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "channel",
+              "templateId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "channel": {
+                "type": "string",
+                "enum": [
+                  "sms"
+                ]
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 160
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "channel",
+              "text"
+            ]
+          }
         ]
       },
       "Webhook.user.created": {

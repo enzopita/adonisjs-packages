@@ -1,4 +1,5 @@
 import { test } from '@japa/runner'
+import type { JsonSchema } from '../../src/types.ts'
 import { mergeSchemas } from '../../src/document/validator_schemas.ts'
 
 test.group('mergeSchemas', () => {
@@ -73,5 +74,84 @@ test.group('mergeSchemas', () => {
     )
 
     assert.notProperty(merged, 'required')
+  })
+
+  test('merges an object with every branch of its groups', ({ assert }) => {
+    const branch = (key: string) => ({
+      type: 'object',
+      properties: { [key]: { type: 'string' } },
+      required: [key],
+    })
+
+    const merged = mergeSchemas(
+      {
+        anyOf: [
+          { anyOf: [branch('a'), branch('b')] },
+          { anyOf: [branch('c')] },
+          { ...branch('base'), additionalProperties: false },
+        ],
+      },
+      {},
+    )
+
+    assert.deepEqual(
+      merged.anyOf?.map(object => [object.required, object.additionalProperties]),
+      [
+        [['base', 'a', 'c'], false],
+        [['base', 'b', 'c'], false],
+      ],
+    )
+  })
+
+  test('fills a group branch from the union member with the same literal', ({ assert }) => {
+    const branch = (channel: string) => ({
+      type: 'object',
+      properties: { channel: { type: 'string', enum: [channel] }, file: {} },
+    })
+
+    const member = (channel: string, format: string) => ({
+      type: 'object',
+      properties: { channel: { type: 'string', const: channel }, file: { type: 'string', format } },
+    })
+
+    const merged = mergeSchemas(
+      { anyOf: [{ anyOf: [branch('rcs'), branch('sms')] }, { type: 'object', properties: {} }] },
+      { anyOf: [member('sms', 'sms'), member('rcs', 'rcs')] },
+    )
+
+    assert.deepEqual(
+      merged.anyOf?.map(object => object.properties?.file),
+      [
+        { type: 'string', format: 'rcs' },
+        { type: 'string', format: 'sms' },
+      ],
+    )
+  })
+
+  test('keeps a group branch no union member matches as Vine emits it', ({ assert }) => {
+    const vineBranch = { type: 'object', properties: { file: {} } }
+
+    const merged = mergeSchemas(
+      { anyOf: [{ anyOf: [vineBranch] }, { type: 'object', properties: {} }] },
+      {
+        anyOf: [
+          { type: 'object', properties: { file: { type: 'string' } } },
+          { type: 'object', properties: { file: { type: 'number' } } },
+        ],
+      },
+    )
+
+    assert.deepEqual(merged.anyOf, [vineBranch])
+  })
+
+  test('keeps a union of objects as Vine emits it', ({ assert }) => {
+    const union: JsonSchema = {
+      anyOf: [
+        { type: 'object', properties: { a: {} } },
+        { type: 'object', properties: { b: {} } },
+      ],
+    }
+
+    assert.deepEqual(mergeSchemas(union, { anyOf: [{ type: 'object' }] }), union)
   })
 })

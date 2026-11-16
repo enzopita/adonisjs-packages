@@ -6,6 +6,9 @@ import type { RouteOperation } from '../routes/route_operation.ts'
 // The keys `request.validateUsing()` adds next to the body and the query string.
 const NOT_IN_BODY = new Set(['params', 'headers', 'cookies'])
 
+// A Vine union of objects has the same shape as a merged group's input, and keeps its undocumented body.
+const fromGroups = new WeakSet<JsonSchema>()
+
 /**
  * Vine emits draft-7 object schemas, and every keyword JsonSchema names means the same there.
  */
@@ -19,6 +22,18 @@ interface VineValidator {
  */
 export function mergeSchemas(vine: JsonSchema | undefined, typed: JsonSchema): JsonSchema {
   if (!vine || !Object.keys(vine).length) return typed
+
+  const branches = groupBranches(vine)
+
+  if (branches) {
+    const merged = {
+      anyOf: branches.map(branch => mergeSchemas(branch, typedBranch(branch, typed) ?? {})),
+    }
+
+    fromGroups.add(merged)
+
+    return merged
+  }
 
   if (!vine.properties || !typed.properties) return vine
 
@@ -40,9 +55,59 @@ export function mergeSchemas(vine: JsonSchema | undefined, typed: JsonSchema): J
 }
 
 /**
+ * Vine emits `object.merge(group)` as `{ anyOf: [...groups, object] }`, each group an `anyOf` of
+ * its branches, but means the object and one branch of every group: these are the complete objects.
+ */
+function groupBranches(vine: JsonSchema): JsonSchema[] | undefined {
+  const base = vine.anyOf?.at(-1)
+  const groups = vine.anyOf?.slice(0, -1) ?? []
+
+  const isGroup = (group: JsonSchema) => group.anyOf?.every(branch => branch.type === 'object')
+
+  if (base?.type !== 'object' || !groups.length || !groups.every(isGroup)) return undefined
+
+  return groups.reduce(
+    (objects, group) =>
+      objects.flatMap(object =>
+        group.anyOf!.map(branch => {
+          const required = [...(object.required ?? []), ...(branch.required ?? [])]
+
+          return {
+            ...object,
+            properties: { ...object.properties, ...branch.properties },
+            ...(required.length > 0 && { required }),
+          }
+        }),
+      ),
+    [base],
+  )
+}
+
+/**
+ * The TypeScript union member a branch is, told apart by the literals Vine emits as one-value enums.
+ */
+function typedBranch(branch: JsonSchema, typed: JsonSchema) {
+  const literals = Object.entries(branch.properties ?? {}).filter(
+    ([, schema]) => schema.enum?.length === 1,
+  )
+
+  const matches = (typed.anyOf ?? []).filter(member =>
+    literals.every(([key, schema]) => member.properties?.[key]?.const === schema.enum![0]),
+  )
+
+  return matches.length === 1 ? matches[0] : undefined
+}
+
+/**
  * The part of the input that is the request body: what `params`, `headers` and `cookies` hold is not.
  */
 export function bodyFields(input: JsonSchema): JsonSchema | undefined {
+  if (fromGroups.has(input)) {
+    const branches = input.anyOf!.map(bodyFields).filter(branch => branch !== undefined)
+
+    return branches.length ? { anyOf: branches } : undefined
+  }
+
   const keep = (key: string) => !NOT_IN_BODY.has(key)
   const properties = Object.entries(input.properties ?? {}).filter(([key]) => keep(key))
 

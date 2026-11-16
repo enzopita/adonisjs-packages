@@ -51,3 +51,21 @@ export const sentMessageProbeValidator = vine.create(
       ]),
     ),
 )
+
+const suggestion = vine.object({ text: vine.string().maxLength(25) }).merge(
+  vine.group([
+    vine.group.if(data => data.kind === 'url', {
+      kind: vine.literal('url'),
+      url: vine.string().url(),
+    }),
+    vine.group.else({ kind: vine.literal('reply') }),
+  ]),
+)
+
+/**
+ * A body whose array items are an object merged with a group, as an RCS template's suggestions.
+ */
+export const templateProbeValidator = vine.create({
+  name: vine.string(),
+  suggestions: vine.array(suggestion),
+})

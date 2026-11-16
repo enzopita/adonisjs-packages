@@ -35,9 +35,11 @@ export function mergeSchemas(vine: JsonSchema | undefined, typed: JsonSchema): J
     return merged
   }
 
-  if (!vine.properties || !typed.properties) return vine
+  if (vine.items) return { ...vine, items: mergeSchemas(vine.items, typed.items ?? {}) }
 
-  const typedProperties = typed.properties
+  if (!vine.properties) return vine
+
+  const typedProperties = typed.properties ?? {}
 
   const properties = Object.fromEntries(
     Object.entries(vine.properties).map(([key, schema]) => [

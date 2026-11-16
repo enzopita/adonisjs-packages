@@ -86,4 +86,34 @@ test.group('openapi:generate on the playground app: the request input', group =>
       ],
     })
   })
+
+  test('documents an object merged with a group in array items as one object per branch', ({
+    assert,
+  }) => {
+    const template = document.paths['/api/v1/probe/templates']!.post!
+
+    assert.deepEqual(body(document, template)?.properties?.suggestions?.items, {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            text: { type: 'string', maxLength: 25 },
+            kind: { type: 'string', enum: ['url'] },
+            url: { type: 'string', format: 'uri' },
+          },
+          required: ['text', 'kind', 'url'],
+          additionalProperties: false,
+        },
+        {
+          type: 'object',
+          properties: {
+            text: { type: 'string', maxLength: 25 },
+            kind: { type: 'string', enum: ['reply'] },
+          },
+          required: ['text', 'kind'],
+          additionalProperties: false,
+        },
+      ],
+    })
+  })
 })

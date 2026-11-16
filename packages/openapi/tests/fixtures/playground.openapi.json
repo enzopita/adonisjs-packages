@@ -2918,6 +2918,111 @@
         }
       }
     },
+    "/api/v1/probe/templates": {
+      "post": {
+        "operationId": "probe.probe.template",
+        "tags": [
+          "Probe"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "suggestions": {
+                      "type": "array",
+                      "items": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "url": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "url"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "text",
+                              "url",
+                              "kind"
+                            ]
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "const": "reply"
+                              }
+                            },
+                            "additionalProperties": false,
+                            "required": [
+                              "text",
+                              "kind"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "additionalProperties": false,
+                  "required": [
+                    "name",
+                    "suggestions"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/probe.probe.template.body"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/probe.probe.template.body"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/probe.probe.template.body"
+              }
+            }
+          }
+        }
+      }
+    },
     "/oauth/github/redirect": {
       "get": {
         "operationId": "github.redirect",
@@ -3453,6 +3558,71 @@
               "text"
             ]
           }
+        ]
+      },
+      "probe.probe.template.body": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "suggestions": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 25
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "url"
+                      ]
+                    },
+                    "url": {
+                      "type": "string",
+                      "format": "uri"
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "kind",
+                    "url"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "text": {
+                      "type": "string",
+                      "maxLength": 25
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "reply"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "text",
+                    "kind"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "suggestions"
         ]
       },
       "Webhook.user.created": {

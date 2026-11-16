@@ -144,6 +144,29 @@ test.group('mergeSchemas', () => {
     assert.deepEqual(merged.anyOf, [vineBranch])
   })
 
+  test('merges an object with its groups in array items and group branches', ({ assert }) => {
+    const merged: JsonSchema = {
+      anyOf: [
+        { anyOf: [{ type: 'object', properties: { a: {} }, required: ['a'] }] },
+        { type: 'object', properties: { base: {} }, required: ['base'] },
+      ],
+    }
+
+    const schema = mergeSchemas(
+      {
+        anyOf: [
+          { anyOf: [{ type: 'object', properties: { list: { type: 'array', items: merged } } }] },
+          { type: 'object', properties: {} },
+        ],
+      },
+      {},
+    )
+
+    assert.deepEqual(schema.anyOf?.[0]?.properties?.list?.items, {
+      anyOf: [{ type: 'object', properties: { base: {}, a: {} }, required: ['base', 'a'] }],
+    })
+  })
+
   test('keeps a union of objects as Vine emits it', ({ assert }) => {
     const union: JsonSchema = {
       anyOf: [

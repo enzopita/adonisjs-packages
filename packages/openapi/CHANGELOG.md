@@ -1,5 +1,11 @@
 # @enzopita/adonisjs-openapi
 
+## 1.5.1
+
+### Patch Changes
+
+- [#99](https://github.com/enzopita/adonisjs-packages/pull/99) [`aabdde0`](https://github.com/enzopita/adonisjs-packages/commit/aabdde01a515e59a1b7a6a9c1b496e00220e19f8) Thanks [@enzopita](https://github.com/enzopita)! - Document an object merged with a `vine.group()` as one complete object per group branch at every depth, not only as the whole body: in a property, in an array's items and in a group branch. `vine.array(vine.object({ text }).merge(group))` used to document its items as Vine's loose `anyOf: [group, object]`, which rejects a valid item holding keys of both and accepts one missing the group's keys.
+
 ## 1.5.0
 
 ### Minor Changes

@@ -51,4 +51,31 @@ test.group('openapi:generate on the playground app: the request input', group =>
     for (const media of Object.values(content))
       assert.deepEqual(media.schema, { $ref: '#/components/schemas/probe.probe.nullable.body' })
   })
+
+  test('documents an object merged with a group as one object per branch', ({ assert }) => {
+    const message = document.paths['/api/v1/probe/messages/{id}']!.post!
+
+    assert.deepEqual(body(document, message), {
+      anyOf: [
+        {
+          type: 'object',
+          properties: {
+            channel: { type: 'string', enum: ['rcs'] },
+            templateId: { type: 'string', format: 'uuid' },
+          },
+          additionalProperties: false,
+          required: ['channel', 'templateId'],
+        },
+        {
+          type: 'object',
+          properties: {
+            channel: { type: 'string', enum: ['sms'] },
+            text: { type: 'string', maxLength: 160 },
+          },
+          additionalProperties: false,
+          required: ['channel', 'text'],
+        },
+      ],
+    })
+  })
 })

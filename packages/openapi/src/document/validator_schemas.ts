@@ -99,6 +99,13 @@ function typedBranch(branch: JsonSchema, typed: JsonSchema) {
 }
 
 /**
+ * The `params` the input validates, which every branch of a merged group shares.
+ */
+export function paramsOf(input: JsonSchema | undefined) {
+  return (input && fromGroups.has(input) ? input.anyOf![0] : input)?.properties?.params
+}
+
+/**
  * The part of the input that is the request body: what `params`, `headers` and `cookies` hold is not.
  */
 export function bodyFields(input: JsonSchema): JsonSchema | undefined {

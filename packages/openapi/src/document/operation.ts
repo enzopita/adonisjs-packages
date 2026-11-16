@@ -5,6 +5,7 @@ import type { HttpMethod, JsonSchema, OpenApiOperation } from '../types.ts'
 import type { RouteOperation } from '../routes/route_operation.ts'
 import { componentName } from './component_name.ts'
 import { parametersFor } from './parameters.ts'
+import { paramsOf } from './validator_schemas.ts'
 
 export interface OperationParts {
   meta: OperationMeta
@@ -27,11 +28,7 @@ export function operationFor(
   const validated = readsQueryOnly ? undefined : fields
   const body = requestBody ? app.schemas.convert(requestBody) : validated
 
-  const parameters = parametersFor(
-    route,
-    readsQueryOnly ? fields : undefined,
-    input?.properties?.params,
-  )
+  const parameters = parametersFor(route, readsQueryOnly ? fields : undefined, paramsOf(input))
 
   const operation: OpenApiOperation = {
     operationId,

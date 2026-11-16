@@ -11,6 +11,7 @@ import PlanLimitException from '#exceptions/plan_limit_exception'
 import MaintenanceException from '#exceptions/maintenance_exception'
 import SeatLimitException from '#exceptions/seat_limit_exception'
 import {
+  attachmentsProbeValidator,
   echoProbeValidator,
   nullableProbeValidator,
   pagedProbeValidator,
@@ -262,6 +263,12 @@ export default class ProbeController {
 
   async template({ request }: HttpContext) {
     return request.validateUsing(templateProbeValidator)
+  }
+
+  async attachments({ request }: HttpContext) {
+    const { attachments } = await request.validateUsing(attachmentsProbeValidator)
+
+    return { names: attachments.map(file => file.clientName) }
   }
 
   async head() {

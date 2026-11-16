@@ -69,3 +69,10 @@ export const templateProbeValidator = vine.create({
   name: vine.string(),
   suggestions: vine.array(suggestion),
 })
+
+/**
+ * A body that is a list of files, which Vine emits as an array of `{}` items.
+ */
+export const attachmentsProbeValidator = vine.create({
+  attachments: vine.array(vine.file({ size: '2mb' })),
+})

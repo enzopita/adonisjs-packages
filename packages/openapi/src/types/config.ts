@@ -23,12 +23,18 @@ export interface DocumentConfig {
   tags: { name: string; description?: string }[]
 }
 
+/**
+ * A key of `schemes`, several keys any one of which lets the request through, or a key that the
+ * keys in `notWith` make unnecessary, such as a tenant header an API key already implies.
+ */
+export type MiddlewareSecurity = string | string[] | { scheme: string; notWith: string[] }
+
 export interface SecurityConfig {
   schemes: Record<string, SecurityScheme>
   /**
-   * Maps a named middleware (as in `middleware.auth()`) to a key of `schemes`.
+   * Maps a named middleware (as in `middleware.auth()`) to the schemes it accepts.
    */
-  middleware: Record<string, string>
+  middleware: Record<string, MiddlewareSecurity>
 }
 
 export interface OpenApiConfig {

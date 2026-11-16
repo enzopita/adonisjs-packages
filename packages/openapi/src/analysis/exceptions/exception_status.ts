@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, sep } from 'node:path'
 import ts from 'typescript'
 import type { ExceptionType } from './exception_class.ts'
 import { aliased, statusCode, statusOf } from '../symbols.ts'
@@ -130,7 +130,7 @@ function* implementations(declarationFile: string, name: string) {
   const others = () =>
     readdirSync(root, { recursive: true, encoding: 'utf8' })
       .filter(file => /\.(m|c)?js$/.test(file) && !file.split(/[\\/]/).includes('node_modules'))
-      .map(file => join(root, file))
+      .map(file => join(root, file).split(sep).join('/'))
       .filter(file => file !== sibling)
 
   for (const file of [...(existsSync(sibling) ? [sibling] : []), ...others()]) {

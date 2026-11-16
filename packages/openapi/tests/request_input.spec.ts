@@ -52,6 +52,14 @@ test.group('openapi:generate on the playground app: the request input', group =>
       assert.deepEqual(media.schema, { $ref: '#/components/schemas/probe.probe.nullable.body' })
   })
 
+  test('types the path params of an object merged with a group from its params', ({ assert }) => {
+    const message = document.paths['/api/v1/probe/messages/{id}']!.post!
+
+    assert.deepEqual(message.parameters, [
+      { name: 'id', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } },
+    ])
+  })
+
   test('documents an object merged with a group as one object per branch', ({ assert }) => {
     const message = document.paths['/api/v1/probe/messages/{id}']!.post!
 
